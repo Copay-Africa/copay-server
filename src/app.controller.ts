@@ -1,12 +1,40 @@
 import { Controller, Get } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { AppService } from './app.service';
+import { Public } from './shared/decorators/auth.decorator';
 
+@ApiTags('Health Check')
 @Controller()
 export class AppController {
   constructor(private readonly appService: AppService) {}
 
+  @Public()
   @Get()
-  getHello(): string {
-    return this.appService.getHello();
+  @ApiOperation({ summary: 'Health check endpoint' })
+  @ApiResponse({
+    status: 200,
+    description: 'Application health status',
+    schema: {
+      type: 'object',
+      properties: {
+        message: { type: 'string', example: 'Co-Pay API is running!' },
+        timestamp: { type: 'string', format: 'date-time' },
+        version: { type: 'string', example: '1.0.0' },
+      },
+    },
+  })
+  getHealth(): object {
+    return this.appService.getHealth();
+  }
+
+  @Public()
+  @Get('health')
+  @ApiOperation({ summary: 'Detailed health check' })
+  @ApiResponse({
+    status: 200,
+    description: 'Detailed health status',
+  })
+  getDetailedHealth(): object {
+    return this.appService.getDetailedHealth();
   }
 }

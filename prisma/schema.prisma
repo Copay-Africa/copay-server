@@ -1,0 +1,222 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+// Enums
+enum UserRole {
+  SUPER_ADMIN
+  ORGANIZATION_ADMIN
+  TENANT
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+  PENDING
+}
+
+enum CooperativeStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+  PENDING_APPROVAL
+}
+
+enum PaymentStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum PaymentType {
+  RENT
+  UTILITY
+  MAINTENANCE
+  FINE
+  OTHER
+}
+
+enum TransactionType {
+  PAYMENT
+  REFUND
+  ADJUSTMENT
+  FEE
+}
+
+enum ComplaintStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+}
+
+enum ComplaintPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+// Models
+model Cooperative {
+  id                String            @id @default(auto()) @map("_id") @db.ObjectId
+  name              String
+  code              String            @unique
+  description       String?
+  address           String?
+  phone             String?
+  email             String?
+  status            CooperativeStatus @default(PENDING_APPROVAL)
+  settings          Json?             // Flexible settings storage
+  
+  // Relationships
+  users             User[]
+  payments          Payment[]
+  transactions      Transaction[]
+  complaints        Complaint[]
+  
+  // Timestamps
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  
+  @@map("cooperatives")
+}
+
+model User {
+  id                String     @id @default(auto()) @map("_id") @db.ObjectId
+  phone             String     @unique
+  pin               String     // Hashed 4-digit PIN
+  firstName         String?
+  lastName          String?
+  email             String?
+  role              UserRole   @default(TENANT)
+  status            UserStatus @default(PENDING)
+  
+  // Multi-tenancy
+  cooperativeId     String?    @db.ObjectId
+  cooperative       Cooperative? @relation(fields: [cooperativeId], references: [id])
+  
+  // Profile data
+  profileData       Json?      // Flexible profile storage
+  
+  // Security
+  lastLoginAt       DateTime?
+  passwordResetToken String?
+  passwordResetExpires DateTime?
+  
+  // Relationships
+  sentPayments      Payment[]  @relation("PaymentSender")
+  receivedPayments  Payment[]  @relation("PaymentReceiver") 
+  transactions      Transaction[]
+  complaints        Complaint[]
+  
+  // Timestamps
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+  
+  @@map("users")
+}
+
+model Payment {
+  id                String        @id @default(auto()) @map("_id") @db.ObjectId
+  amount            Float
+  type              PaymentType   @default(RENT)
+  status            PaymentStatus @default(PENDING)
+  description       String?
+  dueDate           DateTime?
+  
+  // Multi-tenancy
+  cooperativeId     String        @db.ObjectId
+  cooperative       Cooperative   @relation(fields: [cooperativeId], references: [id])
+  
+  // Relationships
+  senderId          String        @db.ObjectId
+  sender            User          @relation("PaymentSender", fields: [senderId], references: [id])
+  
+  receiverId        String?       @db.ObjectId
+  receiver          User?         @relation("PaymentReceiver", fields: [receiverId], references: [id])
+  
+  // Payment gateway data
+  gatewayTransactionId String?
+  gatewayResponse   Json?
+  
+  // Group payment support
+  isGroupPayment    Boolean       @default(false)
+  groupPaymentData  Json?         // Store group payment details
+  
+  // Timestamps
+  paidAt            DateTime?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+  
+  @@map("payments")
+}
+
+model Transaction {
+  id                String          @id @default(auto()) @map("_id") @db.ObjectId
+  amount            Float
+  type              TransactionType
+  description       String?
+  reference         String?         @unique
+  
+  // Multi-tenancy
+  cooperativeId     String          @db.ObjectId
+  cooperative       Cooperative     @relation(fields: [cooperativeId], references: [id])
+  
+  // Relationships
+  userId            String          @db.ObjectId
+  user              User            @relation(fields: [userId], references: [id])
+  
+  // Payment gateway data
+  gatewayData       Json?
+  
+  // Metadata
+  metadata          Json?
+  
+  // Timestamps
+  processedAt       DateTime?
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  
+  @@map("transactions")
+}
+
+model Complaint {
+  id                String           @id @default(auto()) @map("_id") @db.ObjectId
+  title             String
+  description       String
+  status            ComplaintStatus  @default(OPEN)
+  priority          ComplaintPriority @default(MEDIUM)
+  
+  // Multi-tenancy
+  cooperativeId     String           @db.ObjectId
+  cooperative       Cooperative      @relation(fields: [cooperativeId], references: [id])
+  
+  // Relationships
+  userId            String           @db.ObjectId
+  user              User             @relation(fields: [userId], references: [id])
+  
+  // Resolution
+  resolution        String?
+  resolvedAt        DateTime?
+  
+  // Attachments
+  attachments       Json?            // Store file URLs/metadata
+  
+  // Timestamps
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+  
+  @@map("complaints")
+}
