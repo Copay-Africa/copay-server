@@ -1,98 +1,231 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# Co-Pay Backend Server
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+A production-grade NestJS backend for the Cooperative Payment System (Co-Pay) built with Domain-Driven Design (DDD) and Clean Architecture principles.
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+## 🚀 Features
 
-## Description
+- **Multi-tenancy**: Each cooperative operates as an isolated tenant
+- **Role-based Access Control**: Super Admin, Organization Admin, and Tenant roles
+- **JWT Authentication**: Secure phone number + 4-digit PIN authentication
+- **Fastify**: High-performance web framework
+- **MongoDB with Prisma**: Modern database ORM with type safety
+- **Swagger Documentation**: Auto-generated API documentation
+- **Rate Limiting**: Built-in throttling protection
+- **Caching**: Redis-based caching for improved performance
+- **Validation**: Comprehensive input validation with DTOs
+- **Clean Architecture**: DDD modules with separation of concerns
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+## 🏗️ Architecture
 
-## Project setup
-
-```bash
-$ npm install
+```
+src/
+├── config/           # Configuration files and validation
+├── modules/          # Feature modules (DDD structure)
+│   ├── auth/         # Authentication & JWT
+│   ├── user/         # User management & RBAC
+│   └── ...           # Other business modules
+├── shared/           # Shared utilities, guards, decorators
+├── prisma/           # Database service and configuration
+└── main.ts          # Application bootstrap with Fastify
 ```
 
-## Compile and run the project
+## 📋 Prerequisites
+
+- Node.js (v18+)
+- MongoDB database
+- Redis (optional, for caching)
+
+## 🛠️ Installation
+
+1. **Clone the repository**
+
+   ```bash
+   git clone <repository-url>
+   cd copay-backend-server
+   ```
+
+2. **Install dependencies**
+
+   ```bash
+   npm install
+   ```
+
+3. **Setup environment variables**
+
+   ```bash
+   cp .env.example .env
+   ```
+
+   Update the `.env` file with your database URL and configuration:
+
+   ```env
+   DATABASE_URL="mongodb+srv://username:password@cluster.mongodb.net/copay_db"
+   JWT_SECRET="your-super-secret-jwt-key"
+   # ... other configuration
+   ```
+
+4. **Generate Prisma client**
+
+   ```bash
+   npm run prisma:generate
+   ```
+
+5. **Seed the database** (optional)
+
+   ```bash
+   npm run prisma:seed
+   ```
+
+## 🚀 Running the Application
 
 ```bash
-# development
-$ npm run start
+# Development mode with hot reload
+npm run start:dev
 
-# watch mode
-$ npm run start:dev
+# Production mode
+npm run start:prod
 
-# production mode
-$ npm run start:prod
+# Debug mode
+npm run start:debug
 ```
 
-## Run tests
+The application will be available at:
+
+- API: `http://localhost:3000/api/v1`
+- Swagger Docs: `http://localhost:3000/docs`
+- Health Check: `http://localhost:3000/api/v1/health`
+
+## 📚 API Documentation
+
+Access the interactive Swagger documentation at `http://localhost:3000/docs` when the server is running.
+
+### Authentication
+
+All endpoints except health checks require JWT authentication:
+
+1. **Login** with phone number and PIN:
+
+   ```bash
+   POST /api/v1/auth/login
+   {
+     "phone": "+250788123456",
+     "pin": "1234"
+   }
+   ```
+
+2. **Use the JWT token** in subsequent requests:
+
+   ```bash
+   Authorization: Bearer <your-jwt-token>
+   ```
+
+### Default Users (from seed)
+
+- **Super Admin**: `+250788000001` / PIN: `1234`
+- **Organization Admin**: `+250788000002` / PIN: `2345`
+- **Tenant**: `+250788000003` / PIN: `3456`
+
+## 🗄️ Database
+
+### Prisma Commands
 
 ```bash
-# unit tests
-$ npm run test
+# Generate Prisma client
+npm run prisma:generate
 
-# e2e tests
-$ npm run test:e2e
+# Push schema to database
+npm run prisma:push
 
-# test coverage
-$ npm run test:cov
+# Open Prisma Studio
+npm run prisma:studio
+
+# Seed database
+npm run prisma:seed
 ```
 
-## Deployment
+### Database Schema
 
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
+Key models:
 
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
+- `User`: Multi-role user management with tenant isolation
+- `Cooperative`: Tenant/organization management
+- `Payment`: Payment processing and group payments
+- `Transaction`: Financial transaction tracking
+- `Complaint`: Customer complaint management
+
+## 🔒 Security Features
+
+- JWT-based authentication with configurable expiration
+- Role-based access control (RBAC)
+- Multi-tenant data isolation
+- Input validation and sanitization
+- Rate limiting and throttling
+- Secure password hashing with bcrypt
+
+## 🧪 Testing
 
 ```bash
-$ npm install -g @nestjs/mau
-$ mau deploy
+# Unit tests
+npm run test
+
+# E2E tests
+npm run test:e2e
+
+# Test coverage
+npm run test:cov
+
+# Watch mode
+npm run test:watch
 ```
 
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
+## 📦 Production Deployment
 
-## Resources
+1. **Build the application**
 
-Check out a few resources that may come in handy when working with NestJS:
+   ```bash
+   npm run build
+   ```
 
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
+2. **Set production environment variables**
 
-## Support
+   ```bash
+   NODE_ENV=production
+   DATABASE_URL=<production-mongodb-url>
+   JWT_SECRET=<secure-production-secret>
+   ```
 
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
+3. **Run in production**
 
-## Stay in touch
+   ```bash
+   npm run start:prod
+   ```
 
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
+## 🔧 Configuration
 
-## License
+Key environment variables:
 
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `NODE_ENV` | Environment mode | `development` |
+| `PORT` | Server port | `3000` |
+| `DATABASE_URL` | MongoDB connection string | Required |
+| `JWT_SECRET` | JWT signing secret | Required |
+| `JWT_EXPIRES_IN` | JWT expiration | `7d` |
+| `REDIS_HOST` | Redis host for caching | `localhost` |
+| `CORS_ORIGIN` | Allowed CORS origins | `http://localhost:3000` |
+
+## 📝 License
+
+This project is licensed under the MIT License.
+
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes following the existing patterns
+4. Add tests for new functionality
+5. Submit a pull request
+
+## 📞 Support
+
+For support, please contact the development team or create an issue in the repository.

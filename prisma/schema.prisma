@@ -37,14 +37,21 @@ enum PaymentStatus {
   COMPLETED
   FAILED
   CANCELLED
+  REFUNDED
 }
 
-enum PaymentType {
-  RENT
-  UTILITY
-  MAINTENANCE
-  FINE
-  OTHER
+enum PaymentMethodType {
+  MOBILE_MONEY_MTN    // MTN Mobile Money via IremboPay
+  MOBILE_MONEY_AIRTEL // Airtel Money via IremboPay
+  BANK_BK            // Bank of Kigali via IremboPay
+  BANK_IM            // I&M Bank via IremboPay
+  BANK_ECOBANK       // Ecobank via IremboPay
+}
+
+enum PaymentAmountType {
+  FIXED
+  PARTIAL_ALLOWED
+  FLEXIBLE
 }
 
 enum TransactionType {
@@ -82,7 +89,9 @@ model Cooperative {
   
   // Relationships
   users             User[]
+  paymentTypes      PaymentType[]
   payments          Payment[]
+  paymentTransactions PaymentTransaction[]
   transactions      Transaction[]
   complaints        Complaint[]
   
@@ -128,13 +137,53 @@ model User {
   @@map("users")
 }
 
+model PaymentType {
+  id                String            @id @default(auto()) @map("_id") @db.ObjectId
+  name              String            // e.g., "Rent", "Security Deposit", "Cleaning Fee"
+  description       String?
+  amount            Float             // Base amount
+  amountType        PaymentAmountType @default(FIXED)
+  isActive          Boolean           @default(true)
+  
+  // Multi-tenancy
+  cooperativeId     String            @db.ObjectId
+  cooperative       Cooperative       @relation(fields: [cooperativeId], references: [id])
+  
+  // Payment settings
+  allowPartialPayment Boolean         @default(false)
+  minimumAmount     Float?            // For partial payments
+  dueDay            Int?              // Day of month when due (1-31)
+  isRecurring       Boolean           @default(false)
+  
+  // Metadata
+  settings          Json?             // Additional flexible settings
+  
+  // Relationships
+  payments          Payment[]
+  
+  // Timestamps
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  
+  @@unique([cooperativeId, name])     // Prevent duplicate names per cooperative
+  @@map("payment_types")
+}
+
 model Payment {
   id                String        @id @default(auto()) @map("_id") @db.ObjectId
   amount            Float
-  type              PaymentType   @default(RENT)
   status            PaymentStatus @default(PENDING)
   description       String?
   dueDate           DateTime?
+  
+  // Payment Type relationship
+  paymentTypeId     String        @db.ObjectId
+  paymentType       PaymentType   @relation(fields: [paymentTypeId], references: [id])
+  
+  // Payment method details
+  paymentMethod     PaymentMethodType?
+  paymentReference  String?       // External payment reference
+  idempotencyKey    String?       @unique // For preventing duplicate payments
   
   // Multi-tenancy
   cooperativeId     String        @db.ObjectId
@@ -155,12 +204,56 @@ model Payment {
   isGroupPayment    Boolean       @default(false)
   groupPaymentData  Json?         // Store group payment details
   
+  // Transactions
+  transactions      PaymentTransaction[]
+  
   // Timestamps
   paidAt            DateTime?
   createdAt         DateTime      @default(now())
   updatedAt         DateTime      @updatedAt
   
   @@map("payments")
+}
+
+model PaymentTransaction {
+  id                String            @id @default(auto()) @map("_id") @db.ObjectId
+  
+  // Payment reference
+  paymentId         String            @db.ObjectId
+  payment           Payment           @relation(fields: [paymentId], references: [id])
+  
+  // Transaction details
+  amount            Float
+  status            PaymentStatus     @default(PENDING)
+  paymentMethod     PaymentMethodType
+  
+  // External gateway details
+  gatewayTransactionId String?        @unique
+  gatewayReference  String?
+  gatewayResponse   Json?             // Raw gateway response
+  
+  // Processing details
+  processingStartedAt DateTime?
+  processingCompletedAt DateTime?
+  failureReason     String?
+  
+  // Webhook details
+  webhookReceived   Boolean           @default(false)
+  webhookReceivedAt DateTime?
+  webhookData       Json?
+  
+  // Idempotency
+  idempotencyKey    String            @unique
+  
+  // Multi-tenancy
+  cooperativeId     String            @db.ObjectId
+  cooperative       Cooperative       @relation(fields: [cooperativeId], references: [id])
+  
+  // Timestamps
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  
+  @@map("payment_transactions")
 }
 
 model Transaction {

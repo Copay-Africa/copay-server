@@ -1,7 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { ThrottlerModule } from '@nestjs/throttler';
-import { CacheModule } from '@nestjs/cache-manager';
 import { APP_GUARD } from '@nestjs/core';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
@@ -9,7 +8,9 @@ import { PrismaService } from './prisma/prisma.service';
 import { AuthModule } from './modules/auth/auth.module';
 import { UserModule } from './modules/user/user.module';
 import { CooperativeModule } from './modules/cooperative/cooperative.module';
+import { PaymentModule } from './modules/payment/payment.module';
 import { JwtAuthGuard } from './shared/guards/jwt-auth.guard';
+import { CacheConfigModule } from './config/cache.module';
 import {
   databaseConfig,
   jwtConfig,
@@ -58,17 +59,14 @@ import {
       }),
     }),
 
-    // Caching
-    CacheModule.register({
-      ttl: 60, // 60 seconds default TTL
-      max: 100, // maximum number of items in cache
-      isGlobal: true,
-    }),
+    // Redis Caching
+    CacheConfigModule,
 
     // Feature modules
     AuthModule,
     UserModule,
     CooperativeModule,
+    PaymentModule,
   ],
   controllers: [AppController],
   providers: [
