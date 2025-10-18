@@ -9,6 +9,7 @@ import { AuthModule } from './modules/auth/auth.module';
 import { UserModule } from './modules/user/user.module';
 import { CooperativeModule } from './modules/cooperative/cooperative.module';
 import { PaymentModule } from './modules/payment/payment.module';
+import { UssdModule } from './modules/ussd/ussd.module';
 import { JwtAuthGuard } from './shared/guards/jwt-auth.guard';
 import { CacheConfigModule } from './config/cache.module';
 import {
@@ -67,6 +68,7 @@ import {
     UserModule,
     CooperativeModule,
     PaymentModule,
+    UssdModule,
   ],
   controllers: [AppController],
   providers: [
