@@ -12,12 +12,24 @@ import fastifyCompress from '@fastify/compress';
 async function bootstrap() {
   const logger = new Logger('Bootstrap');
 
-  // Create Fastify app instance
+  // Memory optimization for production
+  if (process.env.NODE_ENV === 'production') {
+    // Force garbage collection more frequently
+    if (global.gc) {
+      setInterval(() => {
+        global.gc();
+      }, 30000); // Run GC every 30 seconds
+    }
+  }
+
+  // Create Fastify app instance with memory-optimized settings
   const app = await NestFactory.create<NestFastifyApplication>(
     AppModule,
     new FastifyAdapter({
       logger: process.env.NODE_ENV === 'development',
       trustProxy: true,
+      maxParamLength: 1000, // Limit parameter length
+      bodyLimit: 1048576 * 10, // 10MB body limit
     }),
   );
 
