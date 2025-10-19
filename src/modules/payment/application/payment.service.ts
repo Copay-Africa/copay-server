@@ -31,15 +31,6 @@ export class PaymentService {
     senderId: string,
     cooperativeId: string,
   ): Promise<PaymentResponseDto> {
-    this.logger.log('=== PAYMENT INITIATION STARTED ===');
-    this.logger.log(`Payment Request: ${JSON.stringify(initiatePaymentDto)}`);
-    this.logger.log(`Sender ID: ${senderId}`);
-    this.logger.log(`Cooperative ID: ${cooperativeId}`);
-
-    // Check for duplicate payment using idempotency key
-    this.logger.log(
-      `Checking for duplicate payment with idempotency key: ${initiatePaymentDto.idempotencyKey}`,
-    );
     const existingPayment = await this.prismaService.payment.findFirst({
       where: {
         idempotencyKey: initiatePaymentDto.idempotencyKey,
@@ -47,12 +38,8 @@ export class PaymentService {
     });
 
     if (existingPayment) {
-      this.logger.log(`Duplicate payment found with ID: ${existingPayment.id}`);
-      // Return existing payment instead of creating duplicate
       return this.findById(existingPayment.id, senderId, cooperativeId);
     }
-
-    this.logger.log('No duplicate payment found, proceeding with new payment');
 
     // Get payment type and validate
     const paymentType = await this.prismaService.paymentType.findUnique({
@@ -120,16 +107,9 @@ export class PaymentService {
     });
 
     try {
-      this.logger.log('=== GATEWAY INTEGRATION STARTED ===');
-
-      // Get the appropriate payment gateway
-      this.logger.log(
-        `Getting gateway for payment method: ${initiatePaymentDto.paymentMethod}`,
-      );
       const gateway = this.paymentGatewayFactory.getGateway(
         initiatePaymentDto.paymentMethod,
       );
-      this.logger.log(`Gateway selected: ${gateway.constructor.name}`);
 
       // Prepare gateway request
       const gatewayRequest = {
@@ -145,47 +125,13 @@ export class PaymentService {
         callbackUrl: `${process.env.API_BASE_URL || 'http://localhost:3000'}/api/v1/webhooks/payments/irembopay`,
       };
 
-      this.logger.log('=== GATEWAY REQUEST DETAILS ===');
-      this.logger.log(
-        `Gateway Request: ${JSON.stringify(gatewayRequest, null, 2)}`,
-      );
-      this.logger.log(
-        `Payment Account (Phone): ${initiatePaymentDto.paymentAccount}`,
-      );
-      this.logger.log(`Payment Method: ${initiatePaymentDto.paymentMethod}`);
-      this.logger.log(`Callback URL: ${gatewayRequest.callbackUrl}`);
-
       // Initiate payment with gateway
-      this.logger.log('=== CALLING GATEWAY INITIATE PAYMENT ===');
       const gatewayResponse = await gateway.initiatePayment(gatewayRequest);
-
-      this.logger.log('=== GATEWAY RESPONSE RECEIVED ===');
-      this.logger.log(
-        `Gateway Response: ${JSON.stringify(gatewayResponse, null, 2)}`,
-      );
-      this.logger.log(`Success: ${gatewayResponse.success}`);
-      this.logger.log(`Message: ${gatewayResponse.message}`);
-      this.logger.log(
-        `Gateway Transaction ID: ${gatewayResponse.gatewayTransactionId}`,
-      );
-      this.logger.log(`Gateway Reference: ${gatewayResponse.gatewayReference}`);
-
-      // Check if gatewayTransactionId is valid
-      if (!gatewayResponse.gatewayTransactionId) {
-        this.logger.warn('⚠️ Gateway response missing transaction ID');
-      }
-
-      // Create payment transaction record with gateway response
-      this.logger.log('=== CREATING PAYMENT TRANSACTION RECORD ===');
-      this.logger.log(
-        `Gateway Transaction ID: ${gatewayResponse.gatewayTransactionId}`,
-      );
 
       // Use idempotency key as fallback if gateway transaction ID is not available
       const transactionId =
         gatewayResponse.gatewayTransactionId ||
         `fallback_${initiatePaymentDto.idempotencyKey}`;
-      this.logger.log(`Using Transaction ID: ${transactionId}`);
 
       let paymentTransaction;
       try {
@@ -206,25 +152,12 @@ export class PaymentService {
             },
           },
         );
-        this.logger.log(
-          `✅ Payment transaction created with ID: ${paymentTransaction.id}`,
-        );
       } catch (error: any) {
-        this.logger.error('❌ Failed to create payment transaction');
-        this.logger.error(`Error: ${error.message}`);
-
         // If it's a unique constraint violation on gatewayTransactionId
         if (
           error.code === 'P2002' &&
           error.meta?.target?.includes('gatewayTransactionId')
         ) {
-          this.logger.log(
-            '🔄 Attempting to find existing transaction with same gateway ID',
-          );
-          this.logger.log(
-            `Gateway Transaction ID: ${gatewayResponse.gatewayTransactionId}`,
-          );
-
           // Check if gatewayTransactionId is valid before using it
           if (gatewayResponse.gatewayTransactionId) {
             // Try to find existing transaction with same gateway transaction ID
@@ -235,16 +168,10 @@ export class PaymentService {
                 },
               });
           } else {
-            this.logger.warn(
-              '⚠️ Gateway Transaction ID is undefined, cannot search for existing transaction',
-            );
             paymentTransaction = null;
           }
 
           if (paymentTransaction) {
-            this.logger.log(
-              `♻️ Using existing payment transaction: ${paymentTransaction.id}`,
-            );
             // Update the existing transaction with latest gateway response
             paymentTransaction =
               await this.prismaService.paymentTransaction.update({
@@ -259,9 +186,6 @@ export class PaymentService {
           } else {
             // If we can't find existing transaction, create with modified ID
             const uniqueGatewayId = `${transactionId}_${Date.now()}`;
-            this.logger.log(
-              `🆔 Creating transaction with modified ID: ${uniqueGatewayId}`,
-            );
 
             paymentTransaction =
               await this.prismaService.paymentTransaction.create({

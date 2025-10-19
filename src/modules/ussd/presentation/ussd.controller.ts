@@ -119,7 +119,8 @@ export class UssdController {
       welcome_menu: {
         summary: 'Welcome screen with main menu',
         value: {
-          message: 'Welcome to Co-Pay, John!\n\n1. Make Payment\n2. My Payments\n3. Help\n\nEnter your choice:',
+          message:
+            'Welcome to Co-Pay, John!\n\n1. Make Payment\n2. My Payments\n3. Help\n\nEnter your choice:',
           sessionState: 'CON',
         },
       },
@@ -133,35 +134,40 @@ export class UssdController {
       payment_types: {
         summary: 'Payment type selection menu',
         value: {
-          message: 'Select payment type:\n1. Monthly Rent - 50000 RWF\n2. Security Deposit - 25000 RWF\n3. Cleaning Fee - 5000 RWF\n\nEnter your choice:',
+          message:
+            'Select payment type:\n1. Monthly Rent - 50000 RWF\n2. Security Deposit - 25000 RWF\n3. Cleaning Fee - 5000 RWF\n\nEnter your choice:',
           sessionState: 'CON',
         },
       },
       payment_confirmation: {
         summary: 'Payment confirmation screen',
         value: {
-          message: 'Payment Details:\nType: Monthly Rent\nAmount: 50000 RWF\nDescription: Monthly rental payment\n\nConfirm payment? (Y/N):',
+          message:
+            'Payment Details:\nType: Monthly Rent\nAmount: 50000 RWF\nDescription: Monthly rental payment\n\nConfirm payment? (Y/N):',
           sessionState: 'CON',
         },
       },
       payment_success: {
         summary: 'Successful payment completion',
         value: {
-          message: 'Payment initiated successfully!\nAmount: 50000 RWF\nReference: pay_67890123456\nYou will receive a mobile money prompt shortly.\nThank you for using Co-Pay!',
+          message:
+            'Payment initiated successfully!\nAmount: 50000 RWF\nReference: pay_67890123456\nYou will receive a mobile money prompt shortly.\nThank you for using Co-Pay!',
           sessionState: 'END',
         },
       },
       payment_history: {
         summary: 'Payment history display',
         value: {
-          message: 'Your Recent Payments:\n\n1. Monthly Rent\n   50000 RWF - COMPLETED\n   Date: 15/10/2025\n\n2. Security Deposit\n   25000 RWF - COMPLETED\n   Date: 01/10/2025\n\n3. Cleaning Fee\n   5000 RWF - PENDING\n   Date: 14/10/2025',
+          message:
+            'Your Recent Payments:\n\n1. Monthly Rent\n   50000 RWF - COMPLETED\n   Date: 15/10/2025\n\n2. Security Deposit\n   25000 RWF - COMPLETED\n   Date: 01/10/2025\n\n3. Cleaning Fee\n   5000 RWF - PENDING\n   Date: 14/10/2025',
           sessionState: 'END',
         },
       },
       help_info: {
         summary: 'Help and contact information',
         value: {
-          message: 'Help Information:\n\nYour Cooperative: Green Valley Housing\nContact Phone: +250788555666\nContact Email: info@greenvalley.rw\n\nFor technical support:\nEmail: support@copay.rw\nPhone: +250788000000',
+          message:
+            'Help Information:\n\nYour Cooperative: Green Valley Housing\nContact Phone: +250788555666\nContact Email: info@greenvalley.rw\n\nFor technical support:\nEmail: support@copay.rw\nPhone: +250788000000',
           sessionState: 'END',
         },
       },
@@ -225,7 +231,8 @@ export class UssdController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'USSD service health check',
-    description: 'Endpoint for telecom operators to verify USSD service availability',
+    description:
+      'Endpoint for telecom operators to verify USSD service availability',
   })
   @ApiResponse({
     status: 200,

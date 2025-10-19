@@ -8,19 +8,19 @@ import { PrismaService } from '../../prisma/prisma.service';
 
 /**
  * USSD Module
- * 
+ *
  * Provides USSD functionality for the Co-Pay platform allowing tenants to:
  * - Make payments via USSD (*134#)
  * - Check payment history
  * - Get help and cooperative contact information
- * 
+ *
  * Features:
  * - Session management with Redis caching
  * - PIN-based authentication
  * - Multi-cooperative support
  * - Integration with existing payment gateway (IremboPay)
  * - Telecom standard USSD responses (CON/END)
- * 
+ *
  * Integration points:
  * - UserModule: User authentication and verification
  * - CooperativeModule: Cooperative selection and information
@@ -30,14 +30,14 @@ import { PrismaService } from '../../prisma/prisma.service';
  */
 @Module({
   imports: [
-    UserModule,       // For user authentication and management
+    UserModule, // For user authentication and management
     CooperativeModule, // For cooperative data and selection
-    PaymentModule,    // For payment processing integration
+    PaymentModule, // For payment processing integration
   ],
   controllers: [UssdController],
   providers: [
     UssdService,
-    PrismaService,   // Direct Prisma access for optimized queries
+    PrismaService, // Direct Prisma access for optimized queries
   ],
   exports: [UssdService], // Export service for potential future use
 })

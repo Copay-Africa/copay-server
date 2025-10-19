@@ -1,11 +1,4 @@
-import {
-  Injectable,
-  NotFoundException,
-  BadRequestException,
-  UnauthorizedException,
-  Logger,
-  Inject,
-} from '@nestjs/common';
+import { Injectable, Logger, Inject } from '@nestjs/common';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Cache } from 'cache-manager';
 import * as bcrypt from 'bcryptjs';
@@ -17,11 +10,8 @@ import {
   UssdRequestDto,
   UssdResponseDto,
   UssdSessionDto,
-  UssdPaymentSummaryDto,
-  UssdCooperativeSummaryDto,
-  UssdPaymentTypeSummaryDto,
 } from '../presentation/dto/ussd.dto';
-import { PaymentMethodType, UserRole, PaymentStatus } from '@prisma/client';
+import { PaymentMethodType, PaymentStatus } from '@prisma/client';
 
 @Injectable()
 export class UssdService {
@@ -67,7 +57,10 @@ export class UssdService {
       this.logger.log(`USSD Response: ${JSON.stringify(response)}`);
       return response;
     } catch (error) {
-      this.logger.error(`USSD Error: ${error.message}`, error.stack);
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error';
+      const errorStack = error instanceof Error ? error.stack : undefined;
+      this.logger.error(`USSD Error: ${errorMessage}`, errorStack);
       await this.clearSession(request.sessionId);
       return new UssdResponseDto(
         'Service temporarily unavailable. Please try again later.',
@@ -99,6 +92,9 @@ export class UssdService {
       case 'select_payment_type':
         return this.handlePaymentTypeSelection(session, input);
 
+      case 'select_payment_method':
+        return this.handlePaymentMethodSelection(session, input);
+
       case 'confirm_payment':
         return this.handlePaymentConfirmation(session, input);
 
@@ -119,7 +115,9 @@ export class UssdService {
   /**
    * Welcome screen - first interaction
    */
-  private async handleWelcome(session: UssdSessionDto): Promise<UssdResponseDto> {
+  private async handleWelcome(
+    session: UssdSessionDto,
+  ): Promise<UssdResponseDto> {
     // Check if user exists
     const user = await this.prismaService.user.findUnique({
       where: { phone: session.phoneNumber },
@@ -258,13 +256,13 @@ export class UssdService {
 
     // Process selection
     const choice = parseInt(input.trim());
-    const cooperatives = session.sessionData.cooperatives || [];
+    const cooperatives =
+      (session.sessionData.cooperatives as Array<{
+        id: string;
+        name: string;
+      }>) || [];
 
-    if (
-      isNaN(choice) ||
-      choice < 1 ||
-      choice > cooperatives.length
-    ) {
+    if (isNaN(choice) || choice < 1 || choice > cooperatives.length) {
       return new UssdResponseDto(
         `Invalid choice. Please select 1-${cooperatives.length}:`,
         'CON',
@@ -321,13 +319,14 @@ export class UssdService {
 
     // Process selection
     const choice = parseInt(input.trim());
-    const paymentTypes = session.sessionData.paymentTypes || [];
+    const paymentTypes =
+      (session.sessionData.paymentTypes as Array<{
+        id: string;
+        name: string;
+        amount: number;
+      }>) || [];
 
-    if (
-      isNaN(choice) ||
-      choice < 1 ||
-      choice > paymentTypes.length
-    ) {
+    if (isNaN(choice) || choice < 1 || choice > paymentTypes.length) {
       return new UssdResponseDto(
         `Invalid choice. Please select 1-${paymentTypes.length}:`,
         'CON',
@@ -336,13 +335,75 @@ export class UssdService {
 
     const selectedPaymentType = paymentTypes[choice - 1];
     session.sessionData.selectedPaymentType = selectedPaymentType;
+    session.currentStep = 'select_payment_method';
+
+    return this.handlePaymentMethodSelection(session);
+  }
+
+  /**
+   * Payment method selection handler
+   */
+  private async handlePaymentMethodSelection(
+    session: UssdSessionDto,
+    input?: string,
+  ): Promise<UssdResponseDto> {
+    const selectedPaymentType = session.sessionData.selectedPaymentType as {
+      id: string;
+      name: string;
+      amount: number;
+    };
+
+    if (!input) {
+      // Show payment method options
+      let message = `Payment Type: ${selectedPaymentType.name}\n`;
+      message += `Amount: ${selectedPaymentType.amount} RWF\n\n`;
+      message += `Select payment method:\n`;
+      message += `1. MTN Mobile Money\n`;
+      message += `2. Airtel Money\n`;
+      message += `3. Bank of Kigali\n\n`;
+      message += `Enter your choice:`;
+
+      return new UssdResponseDto(message, 'CON');
+    }
+
+    // Process payment method selection
+    const choice = input.trim();
+    let paymentMethod: PaymentMethodType;
+    let methodName: string;
+
+    switch (choice) {
+      case '1':
+        paymentMethod = PaymentMethodType.MOBILE_MONEY_MTN;
+        methodName = 'MTN Mobile Money';
+        break;
+      case '2':
+        paymentMethod = PaymentMethodType.MOBILE_MONEY_AIRTEL;
+        methodName = 'Airtel Money';
+        break;
+      case '3':
+        paymentMethod = PaymentMethodType.BANK_BK;
+        methodName = 'Bank of Kigali';
+        break;
+      default:
+        return new UssdResponseDto(
+          'Invalid choice. Please select:\n1. MTN Mobile Money\n2. Airtel Money\n3. Bank of Kigali',
+          'CON',
+        );
+    }
+
+    session.sessionData.selectedPaymentMethod = paymentMethod;
+    session.sessionData.selectedPaymentMethodName = methodName;
     session.currentStep = 'confirm_payment';
 
+    // Save session to persist selection
+    await this.saveSession(session);
+
     return new UssdResponseDto(
-      `Payment Details:\n` +
+      `Payment Summary:\n` +
         `Type: ${selectedPaymentType.name}\n` +
         `Amount: ${selectedPaymentType.amount} RWF\n` +
-        `Description: ${selectedPaymentType.description || 'N/A'}\n\n` +
+        `Payment Method: ${methodName}\n` +
+        `Phone: ${session.phoneNumber}\n\n` +
         `Confirm payment? (Y/N):`,
       'CON',
     );
@@ -378,8 +439,18 @@ export class UssdService {
     session: UssdSessionDto,
   ): Promise<UssdResponseDto> {
     try {
-    const selectedPaymentType = session.sessionData.selectedPaymentType;
-    const idempotencyKey = `ussd_${session.sessionId}_${Date.now()}`;
+      const selectedPaymentType = session.sessionData.selectedPaymentType as {
+        id: string;
+        name: string;
+        amount: number;
+      };
+      const selectedPaymentMethod =
+        (session.sessionData.selectedPaymentMethod as PaymentMethodType) ||
+        PaymentMethodType.MOBILE_MONEY_MTN;
+      const paymentMethodName =
+        (session.sessionData.selectedPaymentMethodName as string) ||
+        'MTN Mobile Money';
+      const idempotencyKey = `ussd_${session.sessionId}_${Date.now()}`;
 
       if (!selectedPaymentType) {
         return new UssdResponseDto(
@@ -388,49 +459,88 @@ export class UssdService {
         );
       }
 
+      this.logger.log(`=== USSD PAYMENT PROCESSING ===`);
+      this.logger.log(`User: ${session.userId}`);
+      this.logger.log(`Phone: ${session.phoneNumber}`);
+      this.logger.log(`Payment Type: ${selectedPaymentType.name}`);
+      this.logger.log(`Amount: ${selectedPaymentType.amount} RWF`);
+      this.logger.log(`Payment Method: ${paymentMethodName}`);
+      this.logger.log(`Idempotency Key: ${idempotencyKey}`);
+
       // Create payment request
       const paymentDto = {
         paymentTypeId: selectedPaymentType.id,
         amount: selectedPaymentType.amount,
-        paymentMethod: PaymentMethodType.MOBILE_MONEY_MTN, // Default to MTN for USSD
+        paymentMethod: selectedPaymentMethod,
         paymentAccount: session.phoneNumber, // Use user's phone number for mobile money
-        description: `USSD Payment - ${selectedPaymentType.name}`,
+        description: `USSD Payment - ${selectedPaymentType.name} via ${paymentMethodName}`,
         idempotencyKey,
-      };      // Initiate payment via existing payment service
+      };
+
+      // Initiate payment via existing payment service
       const paymentResult = await this.paymentService.initiatePayment(
         paymentDto,
         session.userId!,
         session.cooperativeId!,
       );
 
+      this.logger.log(`Payment Result: ${JSON.stringify(paymentResult)}`);
+
       if (paymentResult.status === PaymentStatus.COMPLETED) {
         return new UssdResponseDto(
-          `Payment Successful!\n` +
+          `✅ Payment Successful!\n` +
+            `Type: ${selectedPaymentType.name}\n` +
             `Amount: ${paymentResult.amount} RWF\n` +
-            `Reference: ${paymentResult.id}\n` +
+            `Method: ${paymentMethodName}\n` +
+            `Reference: ${paymentResult.paymentReference || paymentResult.id}\n\n` +
             `Thank you for using Co-Pay!`,
           'END',
         );
       } else if (paymentResult.status === PaymentStatus.PENDING) {
-        return new UssdResponseDto(
-          `Payment initiated successfully!\n` +
-            `Amount: ${paymentResult.amount} RWF\n` +
-            `Reference: ${paymentResult.id}\n` +
-            `You will receive a mobile money prompt shortly.\n` +
-            `Thank you for using Co-Pay!`,
-          'END',
-        );
+        let message = `🚀 Payment Initiated!\n`;
+        message += `Type: ${selectedPaymentType.name}\n`;
+        message += `Amount: ${paymentResult.amount} RWF\n`;
+        message += `Method: ${paymentMethodName}\n`;
+        message += `Reference: ${paymentResult.paymentReference || paymentResult.id}\n\n`;
+
+        if (
+          selectedPaymentMethod === PaymentMethodType.MOBILE_MONEY_MTN ||
+          selectedPaymentMethod === PaymentMethodType.MOBILE_MONEY_AIRTEL
+        ) {
+          message += `You will receive a mobile money prompt shortly on ${session.phoneNumber}.\n`;
+          message += `Please complete the payment on your phone.\n\n`;
+        } else if (selectedPaymentMethod === PaymentMethodType.BANK_BK) {
+          message += `Please visit the bank to complete payment.\n`;
+          message += `Payment reference: ${paymentResult.paymentReference || paymentResult.id}\n\n`;
+        }
+
+        message += `Thank you for using Co-Pay!`;
+
+        return new UssdResponseDto(message, 'END');
       } else {
         return new UssdResponseDto(
-          `Payment failed. Please try again later or contact support.\n` +
-            `Reference: ${paymentResult.id}`,
+          `❌ Payment Failed\n` +
+            `Type: ${selectedPaymentType.name}\n` +
+            `Amount: ${selectedPaymentType.amount} RWF\n` +
+            `Reference: ${paymentResult.id}\n\n` +
+            `Please try again later or contact support.\n` +
+            `Support: +250788000000`,
           'END',
         );
       }
     } catch (error) {
-      this.logger.error(`Payment processing error: ${error.message}`, error.stack);
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error';
+      const errorStack = error instanceof Error ? error.stack : undefined;
+      this.logger.error(
+        `Payment processing error: ${errorMessage}`,
+        errorStack,
+      );
       return new UssdResponseDto(
-        'Payment processing failed. Please try again later.',
+        '❌ Payment Processing Failed\n\n' +
+          'Unable to process payment at this time.\n' +
+          'Please try again later or contact support.\n\n' +
+          'Support: +250788000000',
         'END',
       );
     }
@@ -439,7 +549,9 @@ export class UssdService {
   /**
    * View payments handler
    */
-  private async handleViewPayments(session: UssdSessionDto): Promise<UssdResponseDto> {
+  private async handleViewPayments(
+    session: UssdSessionDto,
+  ): Promise<UssdResponseDto> {
     try {
       const payments = await this.prismaService.payment.findMany({
         where: {
@@ -469,7 +581,10 @@ export class UssdService {
 
       return new UssdResponseDto(message, 'END');
     } catch (error) {
-      this.logger.error(`View payments error: ${error.message}`, error.stack);
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error';
+      const errorStack = error instanceof Error ? error.stack : undefined;
+      this.logger.error(`View payments error: ${errorMessage}`, errorStack);
       return new UssdResponseDto(
         'Unable to retrieve payment history. Please try again later.',
         'END',
@@ -480,7 +595,9 @@ export class UssdService {
   /**
    * Help menu handler
    */
-  private async handleHelpMenu(session: UssdSessionDto): Promise<UssdResponseDto> {
+  private async handleHelpMenu(
+    session: UssdSessionDto,
+  ): Promise<UssdResponseDto> {
     try {
       const cooperative = await this.prismaService.cooperative.findUnique({
         where: { id: session.cooperativeId },
@@ -509,7 +626,10 @@ export class UssdService {
         'END',
       );
     } catch (error) {
-      this.logger.error(`Help menu error: ${error.message}`, error.stack);
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error';
+      const errorStack = error instanceof Error ? error.stack : undefined;
+      this.logger.error(`Help menu error: ${errorMessage}`, errorStack);
       return new UssdResponseDto(
         'Help information temporarily unavailable. Please contact your cooperative directly.',
         'END',
@@ -521,7 +641,9 @@ export class UssdService {
    * Session management methods
    */
   private async getSession(sessionId: string): Promise<UssdSessionDto | null> {
-    const sessionData = await this.cacheManager.get(`ussd_session_${sessionId}`);
+    const sessionData = await this.cacheManager.get(
+      `ussd_session_${sessionId}`,
+    );
     return sessionData as UssdSessionDto | null;
   }
 

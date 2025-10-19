@@ -2,13 +2,18 @@ import {
   Injectable,
   UnauthorizedException,
   BadRequestException,
+  NotFoundException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../../prisma/prisma.service';
 import * as bcrypt from 'bcryptjs';
+import * as crypto from 'crypto';
 import { LoginDto } from '../presentation/dto/login.dto';
 import { AuthResponseDto } from '../presentation/dto/auth-response.dto';
+import { ForgotPinDto } from '../presentation/dto/forgot-pin.dto';
+import { ResetPinDto } from '../presentation/dto/reset-pin.dto';
+import { ForgotPinResponseDto } from '../presentation/dto/forgot-pin-response.dto';
 import { JwtPayload } from '../infrastructure/jwt.strategy';
 
 @Injectable()
@@ -111,5 +116,115 @@ export class AuthService {
     }
 
     return 7 * 24 * 60 * 60; // default 7 days
+  }
+
+  async forgotPin(forgotPinDto: ForgotPinDto): Promise<ForgotPinResponseDto> {
+    const { phone } = forgotPinDto;
+
+    // Find user by phone
+    const user = await this.prismaService.user.findUnique({
+      where: { phone },
+    });
+
+    if (!user) {
+      throw new NotFoundException('No account found with this phone number');
+    }
+
+    if (user.status !== 'ACTIVE') {
+      throw new BadRequestException('Account is not active');
+    }
+
+    // Generate 6-digit reset token
+    const resetToken = crypto.randomInt(100000, 999999).toString();
+    const hashedResetToken = await bcrypt.hash(resetToken, 10);
+
+    // Set expiration to 15 minutes from now
+    const resetTokenExpires = new Date(Date.now() + 15 * 60 * 1000);
+
+    // Update user with reset token
+    await this.prismaService.user.update({
+      where: { id: user.id },
+      data: {
+        passwordResetToken: hashedResetToken,
+        passwordResetExpires: resetTokenExpires,
+      },
+    });
+
+    // TODO: Send SMS with reset token
+    // For now, we'll log it (in production, integrate with SMS service)
+    console.log(`Reset token for ${phone}: ${resetToken}`);
+    console.log(`Token expires at: ${resetTokenExpires.toISOString()}`);
+
+    // Mask phone number for response
+    const maskedPhone = this.maskPhoneNumber(phone);
+
+    return {
+      message: 'Reset token sent successfully',
+      expiresAt: resetTokenExpires.toISOString(),
+      maskedPhone,
+    };
+  }
+
+  async resetPin(resetPinDto: ResetPinDto): Promise<{ message: string }> {
+    const { phone, resetToken, newPin } = resetPinDto;
+
+    // Find user by phone
+    const user = await this.prismaService.user.findUnique({
+      where: { phone },
+    });
+
+    if (!user) {
+      throw new NotFoundException('No account found with this phone number');
+    }
+
+    if (!user.passwordResetToken || !user.passwordResetExpires) {
+      throw new BadRequestException(
+        'No reset token found. Please request a new one.',
+      );
+    }
+
+    // Check if token has expired
+    if (new Date() > user.passwordResetExpires) {
+      throw new BadRequestException(
+        'Reset token has expired. Please request a new one.',
+      );
+    }
+
+    // Verify reset token
+    const isTokenValid = await bcrypt.compare(
+      resetToken,
+      user.passwordResetToken,
+    );
+    if (!isTokenValid) {
+      throw new BadRequestException('Invalid reset token');
+    }
+
+    // Hash new PIN
+    const hashedPin = await bcrypt.hash(newPin, 10);
+
+    // Update user with new PIN and clear reset token
+    await this.prismaService.user.update({
+      where: { id: user.id },
+      data: {
+        pin: hashedPin,
+        passwordResetToken: null,
+        passwordResetExpires: null,
+      },
+    });
+
+    return {
+      message: 'PIN reset successfully',
+    };
+  }
+
+  private maskPhoneNumber(phone: string): string {
+    if (phone.length < 8) return phone;
+
+    // For +250788000001, return +2507880****1
+    const start = phone.substring(0, phone.length - 5);
+    const end = phone.substring(phone.length - 1);
+    const masked = '*'.repeat(4);
+
+    return `${start}${masked}${end}`;
   }
 }

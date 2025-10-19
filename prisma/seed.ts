@@ -121,6 +121,57 @@ async function main() {
 
   console.log('✅ Created tenant users:', [tenant1.phone, tenant2.phone]);
 
+  // Create payment types
+  const paymentTypes = [
+    {
+      name: 'Monthly Rent',
+      description: 'Monthly rental payment',
+      amount: 50000,
+      isRecurring: true,
+      dueDay: 1,
+    },
+    {
+      name: 'Security Deposit',
+      description: 'One-time security deposit',
+      amount: 100000,
+      isRecurring: false,
+    },
+    {
+      name: 'Cleaning Fee',
+      description: 'Monthly cleaning fee',
+      amount: 5000,
+      isRecurring: true,
+      dueDay: 1,
+    },
+    {
+      name: 'Utility Bill',
+      description: 'Monthly utility payments',
+      amount: 15000,
+      isRecurring: true,
+      dueDay: 5,
+    },
+  ];
+
+  for (const paymentTypeData of paymentTypes) {
+    const paymentType = await prisma.paymentType.upsert({
+      where: {
+        cooperativeId_name: {
+          cooperativeId: defaultCooperative.id,
+          name: paymentTypeData.name,
+        },
+      },
+      update: {},
+      create: {
+        ...paymentTypeData,
+        cooperativeId: defaultCooperative.id,
+        isActive: true,
+        allowPartialPayment: false,
+        amountType: 'FIXED',
+      },
+    });
+    console.log('✅ Created payment type:', paymentType.name);
+  }
+
   console.log('🎉 Seed completed successfully!');
 }
 

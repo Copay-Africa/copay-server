@@ -24,6 +24,12 @@ enum UserStatus {
   PENDING
 }
 
+enum AccountRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
 enum CooperativeStatus {
   ACTIVE
   INACTIVE
@@ -41,11 +47,11 @@ enum PaymentStatus {
 }
 
 enum PaymentMethodType {
-  MOBILE_MONEY_MTN    // MTN Mobile Money via IremboPay
+  MOBILE_MONEY_MTN // MTN Mobile Money via IremboPay
   MOBILE_MONEY_AIRTEL // Airtel Money via IremboPay
-  BANK_BK            // Bank of Kigali via IremboPay
-  BANK_IM            // I&M Bank via IremboPay
-  BANK_ECOBANK       // Ecobank via IremboPay
+  BANK_BK // Bank of Kigali via IremboPay
+  BANK_IM // I&M Bank via IremboPay
+  BANK_ECOBANK // Ecobank via IremboPay
 }
 
 enum PaymentAmountType {
@@ -77,239 +83,273 @@ enum ComplaintPriority {
 
 // Models
 model Cooperative {
-  id                String            @id @default(auto()) @map("_id") @db.ObjectId
-  name              String
-  code              String            @unique
-  description       String?
-  address           String?
-  phone             String?
-  email             String?
-  status            CooperativeStatus @default(PENDING_APPROVAL)
-  settings          Json?             // Flexible settings storage
-  
+  id          String            @id @default(auto()) @map("_id") @db.ObjectId
+  name        String
+  code        String            @unique
+  description String?
+  address     String?
+  phone       String?
+  email       String?
+  status      CooperativeStatus @default(PENDING_APPROVAL)
+  settings    Json? // Flexible settings storage
+
   // Relationships
-  users             User[]
-  paymentTypes      PaymentType[]
-  payments          Payment[]
+  users               User[]
+  paymentTypes        PaymentType[]
+  payments            Payment[]
   paymentTransactions PaymentTransaction[]
-  transactions      Transaction[]
-  complaints        Complaint[]
-  
+  transactions        Transaction[]
+  complaints          Complaint[]
+  accountRequests     AccountRequest[]
+
   // Timestamps
-  createdAt         DateTime          @default(now())
-  updatedAt         DateTime          @updatedAt
-  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   @@map("cooperatives")
 }
 
 model User {
-  id                String     @id @default(auto()) @map("_id") @db.ObjectId
-  phone             String     @unique
-  pin               String     // Hashed 4-digit PIN
-  firstName         String?
-  lastName          String?
-  email             String?
-  role              UserRole   @default(TENANT)
-  status            UserStatus @default(PENDING)
-  
+  id        String     @id @default(auto()) @map("_id") @db.ObjectId
+  phone     String     @unique
+  pin       String // Hashed 4-digit PIN
+  firstName String?
+  lastName  String?
+  email     String?
+  role      UserRole   @default(TENANT)
+  status    UserStatus @default(PENDING)
+
   // Multi-tenancy
-  cooperativeId     String?    @db.ObjectId
-  cooperative       Cooperative? @relation(fields: [cooperativeId], references: [id])
-  
+  cooperativeId String?      @db.ObjectId
+  cooperative   Cooperative? @relation(fields: [cooperativeId], references: [id])
+
   // Profile data
-  profileData       Json?      // Flexible profile storage
-  
+  profileData Json? // Flexible profile storage
+
   // Security
-  lastLoginAt       DateTime?
-  passwordResetToken String?
+  lastLoginAt          DateTime?
+  passwordResetToken   String?
   passwordResetExpires DateTime?
-  
+
   // Relationships
-  sentPayments      Payment[]  @relation("PaymentSender")
-  receivedPayments  Payment[]  @relation("PaymentReceiver") 
-  transactions      Transaction[]
-  complaints        Complaint[]
-  
+  sentPayments             Payment[]        @relation("PaymentSender")
+  receivedPayments         Payment[]        @relation("PaymentReceiver")
+  transactions             Transaction[]
+  complaints               Complaint[]
+  processedAccountRequests AccountRequest[] @relation("AccountRequestProcessor")
+  accountRequest           AccountRequest?  @relation("AccountRequestUser")
+
   // Timestamps
-  createdAt         DateTime   @default(now())
-  updatedAt         DateTime   @updatedAt
-  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   @@map("users")
 }
 
 model PaymentType {
-  id                String            @id @default(auto()) @map("_id") @db.ObjectId
-  name              String            // e.g., "Rent", "Security Deposit", "Cleaning Fee"
-  description       String?
-  amount            Float             // Base amount
-  amountType        PaymentAmountType @default(FIXED)
-  isActive          Boolean           @default(true)
-  
+  id          String            @id @default(auto()) @map("_id") @db.ObjectId
+  name        String // e.g., "Rent", "Security Deposit", "Cleaning Fee"
+  description String?
+  amount      Float // Base amount
+  amountType  PaymentAmountType @default(FIXED)
+  isActive    Boolean           @default(true)
+
   // Multi-tenancy
-  cooperativeId     String            @db.ObjectId
-  cooperative       Cooperative       @relation(fields: [cooperativeId], references: [id])
-  
+  cooperativeId String      @db.ObjectId
+  cooperative   Cooperative @relation(fields: [cooperativeId], references: [id])
+
   // Payment settings
-  allowPartialPayment Boolean         @default(false)
-  minimumAmount     Float?            // For partial payments
-  dueDay            Int?              // Day of month when due (1-31)
-  isRecurring       Boolean           @default(false)
-  
+  allowPartialPayment Boolean @default(false)
+  minimumAmount       Float? // For partial payments
+  dueDay              Int? // Day of month when due (1-31)
+  isRecurring         Boolean @default(false)
+
   // Metadata
-  settings          Json?             // Additional flexible settings
-  
+  settings Json? // Additional flexible settings
+
   // Relationships
-  payments          Payment[]
-  
+  payments Payment[]
+
   // Timestamps
-  createdAt         DateTime          @default(now())
-  updatedAt         DateTime          @updatedAt
-  
-  @@unique([cooperativeId, name])     // Prevent duplicate names per cooperative
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([cooperativeId, name]) // Prevent duplicate names per cooperative
   @@map("payment_types")
 }
 
 model Payment {
-  id                String        @id @default(auto()) @map("_id") @db.ObjectId
-  amount            Float
-  status            PaymentStatus @default(PENDING)
-  description       String?
-  dueDate           DateTime?
-  
+  id          String        @id @default(auto()) @map("_id") @db.ObjectId
+  amount      Float
+  status      PaymentStatus @default(PENDING)
+  description String?
+  dueDate     DateTime?
+
   // Payment Type relationship
-  paymentTypeId     String        @db.ObjectId
-  paymentType       PaymentType   @relation(fields: [paymentTypeId], references: [id])
-  
+  paymentTypeId String      @db.ObjectId
+  paymentType   PaymentType @relation(fields: [paymentTypeId], references: [id])
+
   // Payment method details
-  paymentMethod     PaymentMethodType?
-  paymentReference  String?       // External payment reference
-  idempotencyKey    String?       @unique // For preventing duplicate payments
-  
+  paymentMethod    PaymentMethodType?
+  paymentReference String? // External payment reference
+  idempotencyKey   String?            @unique // For preventing duplicate payments
+
   // Multi-tenancy
-  cooperativeId     String        @db.ObjectId
-  cooperative       Cooperative   @relation(fields: [cooperativeId], references: [id])
-  
+  cooperativeId String      @db.ObjectId
+  cooperative   Cooperative @relation(fields: [cooperativeId], references: [id])
+
   // Relationships
-  senderId          String        @db.ObjectId
-  sender            User          @relation("PaymentSender", fields: [senderId], references: [id])
-  
-  receiverId        String?       @db.ObjectId
-  receiver          User?         @relation("PaymentReceiver", fields: [receiverId], references: [id])
-  
+  senderId String @db.ObjectId
+  sender   User   @relation("PaymentSender", fields: [senderId], references: [id])
+
+  receiverId String? @db.ObjectId
+  receiver   User?   @relation("PaymentReceiver", fields: [receiverId], references: [id])
+
   // Payment gateway data
   gatewayTransactionId String?
-  gatewayResponse   Json?
-  
+  gatewayResponse      Json?
+
   // Group payment support
-  isGroupPayment    Boolean       @default(false)
-  groupPaymentData  Json?         // Store group payment details
-  
+  isGroupPayment   Boolean @default(false)
+  groupPaymentData Json? // Store group payment details
+
   // Transactions
-  transactions      PaymentTransaction[]
-  
+  transactions PaymentTransaction[]
+
   // Timestamps
-  paidAt            DateTime?
-  createdAt         DateTime      @default(now())
-  updatedAt         DateTime      @updatedAt
-  
+  paidAt    DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
   @@map("payments")
 }
 
 model PaymentTransaction {
-  id                String            @id @default(auto()) @map("_id") @db.ObjectId
-  
+  id String @id @default(auto()) @map("_id") @db.ObjectId
+
   // Payment reference
-  paymentId         String            @db.ObjectId
-  payment           Payment           @relation(fields: [paymentId], references: [id])
-  
+  paymentId String  @db.ObjectId
+  payment   Payment @relation(fields: [paymentId], references: [id])
+
   // Transaction details
-  amount            Float
-  status            PaymentStatus     @default(PENDING)
-  paymentMethod     PaymentMethodType
-  
+  amount        Float
+  status        PaymentStatus     @default(PENDING)
+  paymentMethod PaymentMethodType
+
   // External gateway details
-  gatewayTransactionId String?        @unique
-  gatewayReference  String?
-  gatewayResponse   Json?             // Raw gateway response
-  
+  gatewayTransactionId String? @unique
+  gatewayReference     String?
+  gatewayResponse      Json? // Raw gateway response
+
   // Processing details
-  processingStartedAt DateTime?
+  processingStartedAt   DateTime?
   processingCompletedAt DateTime?
-  failureReason     String?
-  
+  failureReason         String?
+
   // Webhook details
-  webhookReceived   Boolean           @default(false)
+  webhookReceived   Boolean   @default(false)
   webhookReceivedAt DateTime?
   webhookData       Json?
-  
+
   // Idempotency
-  idempotencyKey    String            @unique
-  
+  idempotencyKey String @unique
+
   // Multi-tenancy
-  cooperativeId     String            @db.ObjectId
-  cooperative       Cooperative       @relation(fields: [cooperativeId], references: [id])
-  
+  cooperativeId String      @db.ObjectId
+  cooperative   Cooperative @relation(fields: [cooperativeId], references: [id])
+
   // Timestamps
-  createdAt         DateTime          @default(now())
-  updatedAt         DateTime          @updatedAt
-  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   @@map("payment_transactions")
 }
 
 model Transaction {
-  id                String          @id @default(auto()) @map("_id") @db.ObjectId
-  amount            Float
-  type              TransactionType
-  description       String?
-  reference         String?         @unique
-  
+  id          String          @id @default(auto()) @map("_id") @db.ObjectId
+  amount      Float
+  type        TransactionType
+  description String?
+  reference   String?         @unique
+
   // Multi-tenancy
-  cooperativeId     String          @db.ObjectId
-  cooperative       Cooperative     @relation(fields: [cooperativeId], references: [id])
-  
+  cooperativeId String      @db.ObjectId
+  cooperative   Cooperative @relation(fields: [cooperativeId], references: [id])
+
   // Relationships
-  userId            String          @db.ObjectId
-  user              User            @relation(fields: [userId], references: [id])
-  
+  userId String @db.ObjectId
+  user   User   @relation(fields: [userId], references: [id])
+
   // Payment gateway data
-  gatewayData       Json?
-  
+  gatewayData Json?
+
   // Metadata
-  metadata          Json?
-  
+  metadata Json?
+
   // Timestamps
-  processedAt       DateTime?
-  createdAt         DateTime        @default(now())
-  updatedAt         DateTime        @updatedAt
-  
+  processedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
   @@map("transactions")
 }
 
 model Complaint {
-  id                String           @id @default(auto()) @map("_id") @db.ObjectId
-  title             String
-  description       String
-  status            ComplaintStatus  @default(OPEN)
-  priority          ComplaintPriority @default(MEDIUM)
-  
+  id          String            @id @default(auto()) @map("_id") @db.ObjectId
+  title       String
+  description String
+  status      ComplaintStatus   @default(OPEN)
+  priority    ComplaintPriority @default(MEDIUM)
+
   // Multi-tenancy
-  cooperativeId     String           @db.ObjectId
-  cooperative       Cooperative      @relation(fields: [cooperativeId], references: [id])
-  
+  cooperativeId String      @db.ObjectId
+  cooperative   Cooperative @relation(fields: [cooperativeId], references: [id])
+
   // Relationships
-  userId            String           @db.ObjectId
-  user              User             @relation(fields: [userId], references: [id])
-  
+  userId String @db.ObjectId
+  user   User   @relation(fields: [userId], references: [id])
+
   // Resolution
-  resolution        String?
-  resolvedAt        DateTime?
-  
+  resolution String?
+  resolvedAt DateTime?
+
   // Attachments
-  attachments       Json?            // Store file URLs/metadata
-  
+  attachments Json? // Store file URLs/metadata
+
   // Timestamps
-  createdAt         DateTime         @default(now())
-  updatedAt         DateTime         @updatedAt
-  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   @@map("complaints")
+}
+
+model AccountRequest {
+  id              String               @id @default(auto()) @map("_id") @db.ObjectId
+  fullName        String
+  phone           String
+  cooperativeId   String               @db.ObjectId
+  cooperative     Cooperative          @relation(fields: [cooperativeId], references: [id])
+  roomNumber      String // Room/Unit number
+  status          AccountRequestStatus @default(PENDING)
+  rejectionReason String? // Reason for rejection if applicable
+
+  // Admin who processed the request
+  processedBy   String?   @db.ObjectId
+  processedUser User?     @relation("AccountRequestProcessor", fields: [processedBy], references: [id])
+  processedAt   DateTime?
+
+  // Generated user (if approved)
+  userId String? @unique @db.ObjectId
+  user   User?   @relation("AccountRequestUser", fields: [userId], references: [id])
+
+  // Metadata
+  notes       String? // Admin notes
+  requestData Json? // Additional request data
+
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([phone, cooperativeId]) // Prevent duplicate requests per cooperative
+  @@map("account_requests")
 }

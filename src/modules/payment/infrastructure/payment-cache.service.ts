@@ -33,15 +33,6 @@ export class PaymentCacheService {
         : this.PAYMENT_TYPES_TTL;
 
       await this.cacheManager.set(key, paymentTypes, ttl);
-
-      this.logger.debug(
-        `Cached payment types for cooperative ${cooperativeId}`,
-        {
-          count: paymentTypes.length,
-          ttl,
-          ussdOptimized,
-        },
-      );
     } catch (error) {
       this.logger.error('Failed to cache cooperative payment types', {
         cooperativeId,
@@ -61,21 +52,10 @@ export class PaymentCacheService {
       const cached = await this.cacheManager.get<any[]>(key);
 
       if (cached) {
-        this.logger.debug(
-          `Cache hit for cooperative payment types: ${cooperativeId}`,
-        );
         return cached;
       }
-
-      this.logger.debug(
-        `Cache miss for cooperative payment types: ${cooperativeId}`,
-      );
       return null;
     } catch (error) {
-      this.logger.error('Failed to get cached cooperative payment types', {
-        cooperativeId,
-        error: error.message,
-      });
       return null;
     }
   }
