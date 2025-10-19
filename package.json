@@ -8,10 +8,11 @@
   "scripts": {
     "build": "nest build",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
-    "start": "node --max-old-space-size=1024 dist/main",
+    "start": "node --max-old-space-size=1024 dist/main.js",
     "start:dev": "nest start --watch",
     "start:debug": "nest start --debug --watch",
-    "start:prod": "node --max-old-space-size=1024 dist/main",
+    "start:prod": "node --max-old-space-size=1024 ./dist/main.js",
+    "start:render": "node --max-old-space-size=1024 start.js",
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
     "test": "jest",
     "test:watch": "jest --watch",
