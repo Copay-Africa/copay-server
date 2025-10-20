@@ -6,6 +6,7 @@ import {
 import { ValidationPipe, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { AppModule } from './app.module';
+import { PrismaService } from './prisma/prisma.service';
 import { setupSwagger } from './config/swagger.config';
 import fastifyCompress from '@fastify/compress';
 
@@ -14,10 +15,14 @@ async function bootstrap() {
 
   // Memory optimization for production
   if (process.env.NODE_ENV === 'production') {
-    // Force garbage collection more frequently
-    if (global.gc) {
+    // Force garbage collection more frequently when available (guarded to satisfy TS)
+    if (typeof (global as any).gc === 'function') {
       setInterval(() => {
-        global.gc();
+        try {
+          (global as any).gc();
+        } catch (err) {
+          // ignore if GC fails; this is best-effort and only works when Node started with --expose-gc
+        }
       }, 30000); // Run GC every 30 seconds
     }
   }
@@ -35,6 +40,16 @@ async function bootstrap() {
 
   // Get config service
   const configService = app.get(ConfigService);
+
+  // Ensure Prisma client is imported and connected early (see https://pris.ly/d/importing-client)
+  try {
+    const prisma = app.get(PrismaService);
+    if (prisma && typeof prisma.$connect === 'function') {
+      prisma.$connect().catch(() => null);
+    }
+  } catch (err) {
+    logger.error('PrismaService not available at bootstrap', err);
+  }
 
   // Enable CORS
   const corsOrigins = configService.get('app.corsOrigin');
