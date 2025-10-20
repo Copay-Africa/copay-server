@@ -8,10 +8,12 @@ import { AuthService } from './application/auth.service';
 import { AccountRequestService } from './application/account-request.service';
 import { JwtStrategy } from './infrastructure/jwt.strategy';
 import { PrismaService } from '../../prisma/prisma.service';
+import { SmsModule } from '../sms/sms.module';
 
 @Module({
   imports: [
     PassportModule,
+    SmsModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],
       useFactory: async (configService: ConfigService) => ({

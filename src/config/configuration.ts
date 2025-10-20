@@ -29,3 +29,14 @@ export const rateLimitConfig = registerAs('rateLimit', () => ({
   ttl: parseInt(process.env.THROTTLE_TTL || '60'),
   limit: parseInt(process.env.THROTTLE_LIMIT || '100'),
 }));
+
+export const smsConfig = registerAs('sms', () => ({
+  fdi: {
+    baseUrl:
+      process.env.FDI_SMS_BASE_URL || 'https://messaging.fdibiz.com/api/v1',
+    username: process.env.FDI_SMS_USERNAME || '',
+    password: process.env.FDI_SMS_PASSWORD || '',
+    senderId: process.env.FDI_SMS_SENDER_ID || 'COPAY',
+    enabled: process.env.SMS_ENABLED === 'true',
+  },
+}));

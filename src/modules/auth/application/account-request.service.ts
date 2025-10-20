@@ -6,6 +6,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { PrismaService } from '../../../prisma/prisma.service';
+import { SmsService } from '../../sms/application/sms.service';
 import { AccountRequestStatus, UserRole, UserStatus } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
 import {
@@ -19,7 +20,10 @@ import {
 export class AccountRequestService {
   private readonly logger = new Logger(AccountRequestService.name);
 
-  constructor(private prismaService: PrismaService) {}
+  constructor(
+    private prismaService: PrismaService,
+    private smsService: SmsService,
+  ) {}
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private get prisma(): any {
@@ -67,13 +71,24 @@ export class AccountRequestService {
 
     if (existingRequest) {
       if (existingRequest.status === AccountRequestStatus.PENDING) {
+        // Send SMS notification about existing pending request
+        try {
+          await this.smsService.sendSms(
+            phone,
+            `Hello ${fullName}, your account request for ${cooperative.name} is still pending review. We will notify you once it's processed.`,
+          );
+        } catch (error) {
+          this.logger.warn(
+            `Failed to send SMS for existing pending request: ${error.message}`,
+          );
+        }
         throw new ConflictException(
           'You already have a pending account request for this cooperative',
         );
       }
       if (existingRequest.status === AccountRequestStatus.APPROVED) {
         throw new ConflictException(
-          'You already have an approved account for this cooperative',
+          'Your account request has already been approved',
         );
       }
     }
@@ -128,6 +143,19 @@ export class AccountRequestService {
     this.logger.log(
       `Account request created: ${accountRequest.id} for ${phone} at ${cooperative.name}`,
     );
+
+    // Send SMS confirmation to the user
+    try {
+      await this.smsService.sendSms(
+        phone,
+        `Hello ${fullName}, your account request for ${cooperative.name} has been submitted. You will be notified once it's reviewed. Thank you!`,
+      );
+      this.logger.log(`SMS confirmation sent to ${phone}`);
+    } catch (error) {
+      this.logger.warn(
+        `Failed to send SMS confirmation to ${phone}: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      );
+    }
 
     return this.mapToResponseDto(accountRequest);
   }
@@ -338,6 +366,19 @@ export class AccountRequestService {
         `Account request approved: ${id}, User created: ${user.id}, Default PIN: ${defaultPin}`,
       );
 
+      // Send SMS notification about approval and account details
+      try {
+        await this.smsService.sendSms(
+          request.phone,
+          `Congratulations ${request.fullName}! Your account for ${request.cooperative.name} has been approved. Your login PIN is: ${defaultPin}. Please change it after first login for security.`,
+        );
+        this.logger.log(`SMS approval notification sent to ${request.phone}`);
+      } catch (error) {
+        this.logger.warn(
+          `Failed to send SMS approval notification to ${request.phone}: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        );
+      }
+
       return this.mapToResponseDto(updatedRequest);
     } else {
       // Reject the request
@@ -371,6 +412,19 @@ export class AccountRequestService {
       this.logger.log(
         `Account request rejected: ${id}, Reason: ${rejectionReason}`,
       );
+
+      // Send SMS notification about rejection
+      try {
+        await this.smsService.sendSms(
+          request.phone,
+          `Hello ${request.fullName}, unfortunately your account request for ${request.cooperative.name} has been rejected. Reason: ${rejectionReason}. You may contact the cooperative for more information.`,
+        );
+        this.logger.log(`SMS rejection notification sent to ${request.phone}`);
+      } catch (error) {
+        this.logger.warn(
+          `Failed to send SMS rejection notification to ${request.phone}: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        );
+      }
 
       return this.mapToResponseDto(updatedRequest);
     }

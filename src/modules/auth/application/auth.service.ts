@@ -15,6 +15,7 @@ import { ForgotPinDto } from '../presentation/dto/forgot-pin.dto';
 import { ResetPinDto } from '../presentation/dto/reset-pin.dto';
 import { ForgotPinResponseDto } from '../presentation/dto/forgot-pin-response.dto';
 import { JwtPayload } from '../infrastructure/jwt.strategy';
+import { SmsService } from '../../sms/application/sms.service';
 
 @Injectable()
 export class AuthService {
@@ -22,6 +23,7 @@ export class AuthService {
     private prismaService: PrismaService,
     private jwtService: JwtService,
     private configService: ConfigService,
+    private smsService: SmsService,
   ) {}
 
   async login(loginDto: LoginDto): Promise<AuthResponseDto> {
@@ -150,9 +152,26 @@ export class AuthService {
       },
     });
 
-    // TODO: Send SMS with reset token
-    // For now, we'll log it (in production, integrate with SMS service)
-    console.log(`Reset token for ${phone}: ${resetToken}`);
+    // Send SMS with reset token
+    try {
+      const smsResult = await this.smsService.sendPinResetSms(
+        phone,
+        resetToken,
+      );
+
+      if (!smsResult.success) {
+        // Log the error but don't fail the request
+        console.error(`Failed to send SMS to ${phone}:`, smsResult.error);
+        console.log(`Reset token for ${phone}: ${resetToken} (SMS failed)`);
+      } else {
+        console.log(`Reset token sent via SMS to ${phone}: ${resetToken}`);
+      }
+    } catch (error) {
+      // Log the error but don't fail the request
+      console.error(`SMS service error for ${phone}:`, error.message);
+      console.log(`Reset token for ${phone}: ${resetToken} (SMS error)`);
+    }
+
     console.log(`Token expires at: ${resetTokenExpires.toISOString()}`);
 
     // Mask phone number for response

@@ -10,6 +10,7 @@ import { UserModule } from './modules/user/user.module';
 import { CooperativeModule } from './modules/cooperative/cooperative.module';
 import { PaymentModule } from './modules/payment/payment.module';
 import { UssdModule } from './modules/ussd/ussd.module';
+import { SmsModule } from './modules/sms/sms.module';
 import { JwtAuthGuard } from './shared/guards/jwt-auth.guard';
 import { CacheConfigModule } from './config/cache.module';
 import {
@@ -18,6 +19,7 @@ import {
   redisConfig,
   appConfig,
   rateLimitConfig,
+  smsConfig,
   validateConfig,
 } from './config';
 
@@ -32,6 +34,7 @@ import {
         redisConfig,
         appConfig,
         rateLimitConfig,
+        smsConfig,
       ],
       validate: validateConfig,
       envFilePath: ['.env'],
@@ -69,6 +72,7 @@ import {
     CooperativeModule,
     PaymentModule,
     UssdModule,
+    SmsModule,
   ],
   controllers: [AppController],
   providers: [
