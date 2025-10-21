@@ -160,6 +160,82 @@ export class CooperativeService {
     return this.mapToResponseDto(updatedCooperative);
   }
 
+  async findAllPublic(
+    paginationDto: PaginationDto,
+  ): Promise<PaginatedResponseDto<CooperativeResponseDto>> {
+    const { page, limit, search, sortBy, sortOrder, skip } = paginationDto;
+
+    // Build where clause - only show ACTIVE cooperatives publicly
+    const where: any = {
+      status: CooperativeStatus.ACTIVE,
+    };
+
+    // Add search filter
+    if (search) {
+      where.OR = [
+        { name: { contains: search, mode: 'insensitive' } },
+        { code: { contains: search, mode: 'insensitive' } },
+        { description: { contains: search, mode: 'insensitive' } },
+        { address: { contains: search, mode: 'insensitive' } },
+      ];
+    }
+
+    // Build order by clause
+    const orderBy: any = {};
+    if (sortBy) {
+      orderBy[sortBy] = sortOrder;
+    } else {
+      orderBy.createdAt = 'desc';
+    }
+
+    // Execute queries
+    const [cooperatives, total] = await Promise.all([
+      this.prismaService.cooperative.findMany({
+        where,
+        orderBy,
+        skip,
+        take: limit,
+        include: {
+          _count: {
+            select: { users: true },
+          },
+        },
+      }),
+      this.prismaService.cooperative.count({ where }),
+    ]);
+
+    const cooperativeResponses = cooperatives.map((coop) =>
+      this.mapToResponseDto(coop),
+    );
+
+    return new PaginatedResponseDto(
+      cooperativeResponses,
+      total,
+      page || 1,
+      limit || 10,
+    );
+  }
+
+  async findOnePublic(id: string): Promise<CooperativeResponseDto> {
+    const cooperative = await this.prismaService.cooperative.findUnique({
+      where: {
+        id,
+        status: CooperativeStatus.ACTIVE, // Only show active cooperatives publicly
+      },
+      include: {
+        _count: {
+          select: { users: true },
+        },
+      },
+    });
+
+    if (!cooperative) {
+      throw new NotFoundException('Cooperative not found');
+    }
+
+    return this.mapToResponseDto(cooperative);
+  }
+
   private mapToResponseDto(cooperative: any): CooperativeResponseDto {
     return {
       id: cooperative.id,

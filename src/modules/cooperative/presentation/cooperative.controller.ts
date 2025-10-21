@@ -98,3 +98,43 @@ export class CooperativeController {
     return this.cooperativeService.updateStatus(id, status);
   }
 }
+
+@ApiTags('Public - Cooperatives')
+@Controller('public/cooperatives')
+export class PublicCooperativeController {
+  constructor(private cooperativeService: CooperativeService) {}
+
+  @Get()
+  @ApiOperation({
+    summary: 'Get all active cooperatives (public endpoint)',
+    description:
+      'Returns a list of all active cooperatives without requiring authentication',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Cooperatives retrieved successfully',
+    type: PaginatedResponseDto<CooperativeResponseDto>,
+  })
+  async findAllPublic(
+    @Query() paginationDto: PaginationDto,
+  ): Promise<PaginatedResponseDto<CooperativeResponseDto>> {
+    return this.cooperativeService.findAllPublic(paginationDto);
+  }
+
+  @Get(':id')
+  @ApiOperation({
+    summary: 'Get cooperative by ID (public endpoint)',
+    description:
+      'Returns cooperative details by ID without requiring authentication',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Cooperative retrieved successfully',
+    type: CooperativeResponseDto,
+  })
+  async findOnePublic(
+    @Param('id') id: string,
+  ): Promise<CooperativeResponseDto> {
+    return this.cooperativeService.findOnePublic(id);
+  }
+}
