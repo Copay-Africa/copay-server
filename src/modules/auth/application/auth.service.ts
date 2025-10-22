@@ -231,6 +231,24 @@ export class AuthService {
       },
     });
 
+    // Send SMS confirmation for successful PIN reset
+    try {
+      const smsResult = await this.smsService.sendPinResetSuccessSms(phone);
+
+      if (!smsResult.success) {
+        // Log the error but don't fail the request
+        console.error(
+          `Failed to send PIN reset success SMS to ${phone}:`,
+          smsResult.error,
+        );
+      } else {
+        console.log(`PIN reset success SMS sent to ${phone}`);
+      }
+    } catch (error) {
+      // Log the error but don't fail the request
+      console.error(`SMS service error for ${phone}:`, error.message);
+    }
+
     return {
       message: 'PIN reset successfully',
     };

@@ -58,4 +58,9 @@ export class SmsService {
     const message = `COPAY Transaction: ${type} of RWF ${amount.toLocaleString()} has been processed successfully. Thank you for using COPAY.`;
     return this.sendSms(phoneNumber, message);
   }
+
+  async sendPinResetSuccessSms(phoneNumber: string): Promise<SmsResult> {
+    const message = `Your COPAY PIN has been successfully reset. Your account is now secure with the new PIN. Contact support if you did not make this change.`;
+    return this.sendSms(phoneNumber, message);
+  }
 }
