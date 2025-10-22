@@ -21,7 +21,7 @@ import { PaginationDto } from '../../../shared/dto/pagination.dto';
 import { PaginatedResponseDto } from '../../../shared/dto/paginated-response.dto';
 import { JwtAuthGuard } from '../../../shared/guards/jwt-auth.guard';
 import { RolesGuard } from '../../../shared/guards/roles.guard';
-import { Roles } from '../../../shared/decorators/auth.decorator';
+import { Roles, Public } from '../../../shared/decorators/auth.decorator';
 import { CurrentUser } from '../../../shared/decorators/current-user.decorator';
 import { AuthenticatedUser } from '../../../shared/decorators/current-user.decorator';
 import { CooperativeStatus, UserRole } from '@prisma/client';
@@ -101,6 +101,7 @@ export class CooperativeController {
 
 @ApiTags('Public - Cooperatives')
 @Controller('public/cooperatives')
+@Public()
 export class PublicCooperativeController {
   constructor(private cooperativeService: CooperativeService) {}
 
