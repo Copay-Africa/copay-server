@@ -17,6 +17,10 @@ import {
 import { UserService } from '../application/user.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UserResponseDto } from './dto/user-response.dto';
+import {
+  CurrentUserResponseDto,
+  CooperativeDetailsDto,
+} from './dto/current-user-response.dto';
 import { PaginationDto } from '../../../shared/dto/pagination.dto';
 import { PaginatedResponseDto } from '../../../shared/dto/paginated-response.dto';
 import { JwtAuthGuard } from '../../../shared/guards/jwt-auth.guard';
@@ -65,6 +69,39 @@ export class UserController {
       currentUser.role as UserRole,
       currentUser.cooperativeId,
     );
+  }
+
+  @Get('me')
+  @ApiOperation({
+    summary: 'Get current user profile',
+    description:
+      "Returns the authenticated user's profile information based on JWT token",
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Current user retrieved successfully',
+    type: CurrentUserResponseDto,
+  })
+  async getCurrentUser(
+    @CurrentUser() currentUser: AuthenticatedUser,
+  ): Promise<CurrentUserResponseDto> {
+    return this.userService.getCurrentUser(currentUser.id);
+  }
+
+  @Get('me/cooperatives')
+  @ApiOperation({
+    summary: 'Get user accessible cooperatives',
+    description: 'Returns list of cooperatives the user can make payments for',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'User cooperatives retrieved successfully',
+    type: [CooperativeDetailsDto],
+  })
+  async getUserCooperatives(
+    @CurrentUser() currentUser: AuthenticatedUser,
+  ): Promise<CooperativeDetailsDto[]> {
+    return this.userService.getUserCooperatives(currentUser.id);
   }
 
   @Get(':id')

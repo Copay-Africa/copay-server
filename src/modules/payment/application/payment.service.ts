@@ -29,21 +29,12 @@ export class PaymentService {
   async initiatePayment(
     initiatePaymentDto: InitiatePaymentDto,
     senderId: string,
-    cooperativeId: string,
+    targetCooperativeId?: string, // Allow specifying target cooperative
   ): Promise<PaymentResponseDto> {
-    const existingPayment = await this.prismaService.payment.findFirst({
-      where: {
-        idempotencyKey: initiatePaymentDto.idempotencyKey,
-      },
-    });
-
-    if (existingPayment) {
-      return this.findById(existingPayment.id, senderId, cooperativeId);
-    }
-
-    // Get payment type and validate
+    // Get payment type and validate first
     const paymentType = await this.prismaService.paymentType.findUnique({
       where: { id: initiatePaymentDto.paymentTypeId },
+      include: { cooperative: true },
     });
 
     if (!paymentType) {
@@ -54,9 +45,32 @@ export class PaymentService {
       throw new BadRequestException('Payment type is not active');
     }
 
+    // Use the cooperative ID from the payment type if no target cooperative specified
+    const cooperativeId = targetCooperativeId || paymentType.cooperativeId;
+
+    const existingPayment = await this.prismaService.payment.findFirst({
+      where: {
+        idempotencyKey: initiatePaymentDto.idempotencyKey,
+      },
+    });
+
+    if (existingPayment) {
+      return this.findById(existingPayment.id, senderId, cooperativeId);
+    }
+
+    // Validate cooperative access (users can pay for any active cooperative)
+    const cooperative = await this.prismaService.cooperative.findUnique({
+      where: { id: cooperativeId },
+    });
+
+    if (!cooperative || cooperative.status !== 'ACTIVE') {
+      throw new BadRequestException('Cooperative is not available for payments');
+    }
+
+    // Ensure payment type belongs to the target cooperative
     if (paymentType.cooperativeId !== cooperativeId) {
       throw new BadRequestException(
-        'Payment type does not belong to your cooperative',
+        'Payment type does not belong to the specified cooperative',
       );
     }
 

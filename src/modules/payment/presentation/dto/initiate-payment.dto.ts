@@ -63,4 +63,12 @@ export class InitiatePaymentDto {
   })
   @IsString()
   idempotencyKey: string;
+
+  @ApiPropertyOptional({
+    description: 'Target cooperative ID for cross-cooperative payments',
+    example: '507f1f77bcf86cd799439012',
+  })
+  @IsOptional()
+  @IsString()
+  targetCooperativeId?: string;
 }

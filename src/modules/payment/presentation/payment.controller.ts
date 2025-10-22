@@ -35,7 +35,7 @@ export class PaymentController {
   @ApiOperation({
     summary: 'Initiate a payment',
     description:
-      'Initiates a payment with idempotency support to prevent duplicates',
+      'Initiates a payment with idempotency support to prevent duplicates. Supports cross-cooperative payments by providing targetCooperativeId.',
   })
   @ApiResponse({
     status: 201,
@@ -49,7 +49,7 @@ export class PaymentController {
     return this.paymentService.initiatePayment(
       initiatePaymentDto,
       currentUser.id,
-      currentUser.cooperativeId!,
+      initiatePaymentDto.targetCooperativeId || currentUser.cooperativeId!,
     );
   }
 

@@ -7,6 +7,10 @@ import {
 import { PrismaService } from '../../../prisma/prisma.service';
 import { CreateUserDto } from '../presentation/dto/create-user.dto';
 import { UserResponseDto } from '../presentation/dto/user-response.dto';
+import {
+  CurrentUserResponseDto,
+  CooperativeDetailsDto,
+} from '../presentation/dto/current-user-response.dto';
 import { PaginationDto } from '../../../shared/dto/pagination.dto';
 import { PaginatedResponseDto } from '../../../shared/dto/paginated-response.dto';
 import { UserRole, UserStatus } from '@prisma/client';
@@ -153,6 +157,73 @@ export class UserService {
     return this.mapToResponseDto(updatedUser);
   }
 
+  async getCurrentUser(userId: string): Promise<CurrentUserResponseDto> {
+    const user = await this.prismaService.user.findUnique({
+      where: { id: userId },
+      include: { 
+        cooperative: {
+          select: {
+            id: true,
+            name: true,
+            code: true,
+            status: true,
+          }
+        }
+      },
+    });
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    if (user.status !== UserStatus.ACTIVE) {
+      throw new ForbiddenException('User account is not active');
+    }
+
+    return this.mapToCurrentUserResponseDto(user);
+  }
+
+  async getUserCooperatives(userId: string): Promise<CooperativeDetailsDto[]> {
+    // Get all cooperatives where the user has made payments or has access
+    const cooperatives = await this.prismaService.cooperative.findMany({
+      where: {
+        status: 'ACTIVE',
+        OR: [
+          // Cooperatives where user has made payments
+          {
+            payments: {
+              some: {
+                senderId: userId,
+              },
+            },
+          },
+          // Cooperatives where user is assigned (backward compatibility)
+          {
+            users: {
+              some: {
+                id: userId,
+              },
+            },
+          },
+        ],
+      },
+      select: {
+        id: true,
+        name: true,
+        code: true,
+        status: true,
+      },
+      distinct: ['id'],
+    });
+
+    return cooperatives.map(coop => ({
+      id: coop.id,
+      name: coop.name,
+      code: coop.code,
+      status: coop.status as any,
+    }));
+  }
+
   private mapToResponseDto(user: any): UserResponseDto {
     return {
       id: user.id,
@@ -163,6 +234,27 @@ export class UserService {
       role: user.role,
       status: user.status,
       cooperativeId: user.cooperativeId,
+      lastLoginAt: user.lastLoginAt,
+      createdAt: user.createdAt,
+      updatedAt: user.updatedAt,
+    };
+  }
+
+  private mapToCurrentUserResponseDto(user: any): CurrentUserResponseDto {
+    return {
+      id: user.id,
+      phone: user.phone,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      email: user.email,
+      role: user.role,
+      status: user.status,
+      cooperative: user.cooperative ? {
+        id: user.cooperative.id,
+        name: user.cooperative.name,
+        code: user.cooperative.code,
+        status: user.cooperative.status,
+      } : undefined,
       lastLoginAt: user.lastLoginAt,
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,
