@@ -15,7 +15,11 @@ import { PaymentTypeController } from './presentation/payment-type.controller';
 import { PaymentController } from './presentation/payment.controller';
 import { PaymentWebhookController } from './presentation/payment-webhook.controller';
 
+// Activity Module
+import { ActivityModule } from '../activity/activity.module';
+
 @Module({
+  imports: [ActivityModule],
   controllers: [
     PaymentTypeController,
     PaymentController,

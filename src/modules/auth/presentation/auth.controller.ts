@@ -1,4 +1,11 @@
-import { Controller, Post, Body, HttpCode, HttpStatus } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  Body,
+  HttpCode,
+  HttpStatus,
+  Req,
+} from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { AuthService } from '../application/auth.service';
 import { LoginDto } from './dto/login.dto';
@@ -7,6 +14,7 @@ import { ForgotPinDto } from './dto/forgot-pin.dto';
 import { ResetPinDto } from './dto/reset-pin.dto';
 import { ForgotPinResponseDto } from './dto/forgot-pin-response.dto';
 import { Public } from '../../../shared/decorators/auth.decorator';
+import { Request } from 'express';
 
 @ApiTags('Authentication')
 @Controller('auth')
@@ -26,8 +34,13 @@ export class AuthController {
     status: 401,
     description: 'Invalid credentials',
   })
-  async login(@Body() loginDto: LoginDto): Promise<AuthResponseDto> {
-    return this.authService.login(loginDto);
+  async login(
+    @Body() loginDto: LoginDto,
+    @Req() request: Request,
+  ): Promise<AuthResponseDto> {
+    const ipAddress = request.ip || request.connection.remoteAddress;
+    const userAgent = request.headers['user-agent'];
+    return this.authService.login(loginDto, ipAddress, userAgent);
   }
 
   @Public()
@@ -49,8 +62,11 @@ export class AuthController {
   })
   async forgotPin(
     @Body() forgotPinDto: ForgotPinDto,
+    @Req() request: Request,
   ): Promise<ForgotPinResponseDto> {
-    return this.authService.forgotPin(forgotPinDto);
+    const ipAddress = request.ip || request.connection.remoteAddress;
+    const userAgent = request.headers['user-agent'];
+    return this.authService.forgotPin(forgotPinDto, ipAddress, userAgent);
   }
 
   @Public()
@@ -80,7 +96,10 @@ export class AuthController {
   })
   async resetPin(
     @Body() resetPinDto: ResetPinDto,
+    @Req() request: Request,
   ): Promise<{ message: string }> {
-    return this.authService.resetPin(resetPinDto);
+    const ipAddress = request.ip || request.connection.remoteAddress;
+    const userAgent = request.headers['user-agent'];
+    return this.authService.resetPin(resetPinDto, ipAddress, userAgent);
   }
 }

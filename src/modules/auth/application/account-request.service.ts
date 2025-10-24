@@ -25,7 +25,6 @@ export class AccountRequestService {
     private smsService: SmsService,
   ) {}
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private get prisma(): any {
     return this.prismaService;
   }

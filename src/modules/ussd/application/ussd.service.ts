@@ -481,7 +481,7 @@ export class UssdService {
       const paymentResult = await this.paymentService.initiatePayment(
         paymentDto,
         session.userId!,
-        session.cooperativeId!,
+        session.cooperativeId,
       );
 
       this.logger.log(`Payment Result: ${JSON.stringify(paymentResult)}`);

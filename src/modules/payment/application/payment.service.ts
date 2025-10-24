@@ -15,6 +15,7 @@ import { PaginationDto } from '../../../shared/dto/pagination.dto';
 import { PaginatedResponseDto } from '../../../shared/dto/paginated-response.dto';
 import { PaymentStatus, PaymentAmountType, UserRole } from '@prisma/client';
 import { PaymentGatewayFactory } from '../infrastructure/payment-gateway.factory';
+import { ActivityService } from '../../activity/application/activity.service';
 
 @Injectable()
 export class PaymentService {
@@ -24,6 +25,7 @@ export class PaymentService {
     private prismaService: PrismaService,
     @Inject(CACHE_MANAGER) private cacheManager: Cache,
     private paymentGatewayFactory: PaymentGatewayFactory,
+    private activityService: ActivityService,
   ) {}
 
   async initiatePayment(
@@ -64,7 +66,9 @@ export class PaymentService {
     });
 
     if (!cooperative || cooperative.status !== 'ACTIVE') {
-      throw new BadRequestException('Cooperative is not available for payments');
+      throw new BadRequestException(
+        'Cooperative is not available for payments',
+      );
     }
 
     // Ensure payment type belongs to the target cooperative

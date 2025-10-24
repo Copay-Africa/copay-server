@@ -8,7 +8,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
     CacheModule.registerAsync({
       imports: [ConfigModule],
       useFactory: async (configService: ConfigService) => {
-        const redisConfig = configService.get('redis') as any;
+        const redisConfig = configService.get('redis');
         const nodeEnv = configService.get('app.nodeEnv') as string;
 
         // In serverless environments (like Vercel), use in-memory cache

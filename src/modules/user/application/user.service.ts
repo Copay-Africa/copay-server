@@ -160,15 +160,15 @@ export class UserService {
   async getCurrentUser(userId: string): Promise<CurrentUserResponseDto> {
     const user = await this.prismaService.user.findUnique({
       where: { id: userId },
-      include: { 
+      include: {
         cooperative: {
           select: {
             id: true,
             name: true,
             code: true,
             status: true,
-          }
-        }
+          },
+        },
       },
     });
 
@@ -216,7 +216,7 @@ export class UserService {
       distinct: ['id'],
     });
 
-    return cooperatives.map(coop => ({
+    return cooperatives.map((coop) => ({
       id: coop.id,
       name: coop.name,
       code: coop.code,
@@ -249,12 +249,14 @@ export class UserService {
       email: user.email,
       role: user.role,
       status: user.status,
-      cooperative: user.cooperative ? {
-        id: user.cooperative.id,
-        name: user.cooperative.name,
-        code: user.cooperative.code,
-        status: user.cooperative.status,
-      } : undefined,
+      cooperative: user.cooperative
+        ? {
+            id: user.cooperative.id,
+            name: user.cooperative.name,
+            code: user.cooperative.code,
+            status: user.cooperative.status,
+          }
+        : undefined,
       lastLoginAt: user.lastLoginAt,
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,

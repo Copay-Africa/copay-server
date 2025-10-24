@@ -9,11 +9,13 @@ import { AccountRequestService } from './application/account-request.service';
 import { JwtStrategy } from './infrastructure/jwt.strategy';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SmsModule } from '../sms/sms.module';
+import { ActivityModule } from '../activity/activity.module';
 
 @Module({
   imports: [
     PassportModule,
     SmsModule,
+    ActivityModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],
       useFactory: async (configService: ConfigService) => ({

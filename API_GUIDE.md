@@ -149,6 +149,21 @@ The application comes with pre-seeded data:
 - `GET /api/v1/users/:id` - Get user by ID
 - `PATCH /api/v1/users/:id/status` - Update user status
 
+### Activities (New)
+- `GET /api/activities` - List user activities with filtering
+- `GET /api/activities/me` - Get current user activities
+- `GET /api/activities/security` - Get security events (Admin only)
+- `POST /api/activities` - Create activity record (System use)
+
+### Reminders (New)
+- `GET /api/reminders` - List payment reminders with filtering
+- `POST /api/reminders` - Create new payment reminder
+- `GET /api/reminders/me` - Get current user reminders
+- `GET /api/reminders/due` - Get due/overdue reminders
+- `GET /api/reminders/:id` - Get specific reminder
+- `PUT /api/reminders/:id` - Update reminder
+- `DELETE /api/reminders/:id` - Delete reminder
+
 ### Health Check
 - `GET /api/v1/` - Basic health check
 - `GET /api/v1/health` - Detailed health check
@@ -175,3 +190,12 @@ The system implements multi-tenancy:
 - Rate limiting (100 requests per minute)
 - CORS protection
 - Request/response logging
+
+## Additional Documentation
+
+For detailed API documentation of the new modules:
+
+- **[Complete API Documentation](./API_DOCUMENTATION.md)** - Overview of Activity and Reminder APIs
+- **[Activity API Documentation](./ACTIVITY_API.md)** - Detailed documentation for user activity tracking
+- **[Reminder API Documentation](./REMINDER_API.md)** - Detailed documentation for payment reminders
+- **[Payment API Documentation](./PAYMENTS.md)** - Payment system documentation

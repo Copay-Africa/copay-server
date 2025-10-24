@@ -81,6 +81,57 @@ enum ComplaintPriority {
   URGENT
 }
 
+enum ActivityType {
+  LOGIN
+  LOGOUT
+  PAYMENT_INITIATED
+  PAYMENT_COMPLETED
+  PAYMENT_FAILED
+  PAYMENT_CANCELLED
+  PIN_RESET_REQUESTED
+  PIN_RESET_COMPLETED
+  PROFILE_UPDATED
+  COOPERATIVE_JOINED
+  COOPERATIVE_LEFT
+  COMPLAINT_CREATED
+  COMPLAINT_UPDATED
+  ACCOUNT_SUSPENDED
+  ACCOUNT_ACTIVATED
+  SECURITY_ALERT
+  TRANSACTION_REFUND
+  PAYMENT_TYPE_ACCESSED
+  API_ACCESS
+  FAILED_LOGIN_ATTEMPT
+}
+
+enum ReminderType {
+  PAYMENT_DUE
+  PAYMENT_OVERDUE
+  PAYMENT_UPCOMING
+  CUSTOM
+}
+
+enum ReminderStatus {
+  ACTIVE
+  INACTIVE
+  COMPLETED
+  CANCELLED
+}
+
+enum NotificationStatus {
+  PENDING
+  SENT
+  FAILED
+  DELIVERED
+}
+
+enum NotificationType {
+  SMS
+  EMAIL
+  PUSH_NOTIFICATION
+  IN_APP
+}
+
 // Models
 model Cooperative {
   id          String            @id @default(auto()) @map("_id") @db.ObjectId
@@ -101,6 +152,9 @@ model Cooperative {
   transactions        Transaction[]
   complaints          Complaint[]
   accountRequests     AccountRequest[]
+  activities          Activity[]
+  reminders           Reminder[]
+  notifications       Notification[]
 
   // Timestamps
   createdAt DateTime @default(now())
@@ -138,6 +192,9 @@ model User {
   complaints               Complaint[]
   processedAccountRequests AccountRequest[] @relation("AccountRequestProcessor")
   accountRequest           AccountRequest?  @relation("AccountRequestUser")
+  activities               Activity[]
+  reminders                Reminder[]
+  notifications            Notification[]
 
   // Timestamps
   createdAt DateTime @default(now())
@@ -169,6 +226,7 @@ model PaymentType {
 
   // Relationships
   payments Payment[]
+  reminders Reminder[]
 
   // Timestamps
   createdAt DateTime @default(now())
@@ -215,6 +273,7 @@ model Payment {
 
   // Transactions
   transactions PaymentTransaction[]
+  notifications Notification[]
 
   // Timestamps
   paidAt    DateTime?
@@ -352,4 +411,148 @@ model AccountRequest {
 
   @@unique([phone, cooperativeId]) // Prevent duplicate requests per cooperative
   @@map("account_requests")
+}
+
+model Activity {
+  id          String       @id @default(auto()) @map("_id") @db.ObjectId
+  type        ActivityType
+  title       String // Human-readable activity title
+  description String? // Detailed description
+  
+  // User who performed the activity
+  userId String @db.ObjectId
+  user   User   @relation(fields: [userId], references: [id])
+  
+  // Multi-tenancy
+  cooperativeId String?     @db.ObjectId
+  cooperative   Cooperative? @relation(fields: [cooperativeId], references: [id])
+  
+  // Activity metadata
+  metadata Json? // Additional context data (payment IDs, amounts, etc.)
+  
+  // Request context
+  ipAddress String? // User's IP address
+  userAgent String? // User's browser/device info
+  
+  // Related entities (optional references)
+  relatedPaymentId String? @db.ObjectId // Link to payment if applicable
+  relatedComplaintId String? @db.ObjectId // Link to complaint if applicable
+  
+  // Security context
+  isSecurityEvent Boolean @default(false) // Mark security-related activities
+  riskLevel String? // LOW, MEDIUM, HIGH for security events
+  
+  // Timestamps
+  occurredAt DateTime @default(now()) // When the activity occurred
+  createdAt  DateTime @default(now())
+  
+  @@index([userId, occurredAt]) // Optimize for user activity queries
+  @@index([type, occurredAt]) // Optimize for activity type queries
+  @@index([cooperativeId, occurredAt]) // Optimize for cooperative activity queries
+  @@map("activities")
+}
+
+model Reminder {
+  id          String        @id @default(auto()) @map("_id") @db.ObjectId
+  title       String // User-defined reminder title
+  description String? // Optional description
+  type        ReminderType
+  status      ReminderStatus @default(ACTIVE)
+  
+  // User who created the reminder
+  userId String @db.ObjectId
+  user   User   @relation(fields: [userId], references: [id])
+  
+  // Multi-tenancy
+  cooperativeId String?     @db.ObjectId
+  cooperative   Cooperative? @relation(fields: [cooperativeId], references: [id])
+  
+  // Related payment type (optional)
+  paymentTypeId String?     @db.ObjectId
+  paymentType   PaymentType? @relation(fields: [paymentTypeId], references: [id])
+  
+  // Reminder timing
+  reminderDate DateTime // When to send the reminder
+  isRecurring  Boolean @default(false)
+  recurringPattern String? // DAILY, WEEKLY, MONTHLY, etc.
+  
+  // Notification preferences
+  notificationTypes String[] // Array of NotificationType values
+  advanceNoticeDays Int @default(0) // Days before due date to remind
+  
+  // Custom reminder data
+  customAmount Float? // For custom payment amounts
+  notes        String? // Additional notes
+  
+  // Reminder execution tracking
+  lastTriggered DateTime?
+  nextTrigger   DateTime?
+  triggerCount  Int @default(0)
+  
+  // Metadata
+  metadata Json? // Additional flexible data
+  
+  // Relationships
+  notifications Notification[]
+  
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  @@index([userId, status, nextTrigger]) // Optimize for user reminder queries
+  @@index([status, nextTrigger]) // Optimize for reminder processing
+  @@index([cooperativeId, status]) // Optimize for cooperative queries
+  @@map("reminders")
+}
+
+model Notification {
+  id      String             @id @default(auto()) @map("_id") @db.ObjectId
+  type    NotificationType
+  status  NotificationStatus @default(PENDING)
+  title   String
+  message String
+  
+  // Recipient
+  userId String @db.ObjectId
+  user   User   @relation(fields: [userId], references: [id])
+  
+  // Multi-tenancy
+  cooperativeId String?     @db.ObjectId
+  cooperative   Cooperative? @relation(fields: [cooperativeId], references: [id])
+  
+  // Related entities
+  reminderId String?   @db.ObjectId
+  reminder   Reminder? @relation(fields: [reminderId], references: [id])
+  
+  paymentId String?  @db.ObjectId
+  payment   Payment? @relation(fields: [paymentId], references: [id])
+  
+  // Delivery details
+  recipient String // Phone number, email, or device token
+  
+  // Processing details
+  sentAt      DateTime?
+  deliveredAt DateTime?
+  failedAt    DateTime?
+  errorMessage String? // Error details if failed
+  
+  // Provider response
+  providerResponse Json? // Response from SMS/Email provider
+  
+  // Retry logic
+  retryCount    Int @default(0)
+  maxRetries    Int @default(3)
+  nextRetryAt   DateTime?
+  
+  // Metadata
+  metadata Json?
+  
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  @@index([userId, status, type]) // Optimize for user notification queries
+  @@index([status, nextRetryAt]) // Optimize for retry processing
+  @@index([reminderId, status]) // Optimize for reminder notifications
+  @@map("notifications")
 }

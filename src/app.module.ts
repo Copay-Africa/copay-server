@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { ThrottlerModule } from '@nestjs/throttler';
+import { ScheduleModule } from '@nestjs/schedule';
 import { APP_GUARD } from '@nestjs/core';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
@@ -11,6 +12,8 @@ import { CooperativeModule } from './modules/cooperative/cooperative.module';
 import { PaymentModule } from './modules/payment/payment.module';
 import { UssdModule } from './modules/ussd/ussd.module';
 import { SmsModule } from './modules/sms/sms.module';
+import { ActivityModule } from './modules/activity/activity.module';
+import { ReminderModule } from './modules/reminder/reminder.module';
 import { JwtAuthGuard } from './shared/guards/jwt-auth.guard';
 import { CacheConfigModule } from './config/cache.module';
 import {
@@ -66,6 +69,9 @@ import {
     // Redis Caching
     CacheConfigModule,
 
+    // Task Scheduling
+    ScheduleModule.forRoot(),
+
     // Feature modules
     AuthModule,
     UserModule,
@@ -73,6 +79,8 @@ import {
     PaymentModule,
     UssdModule,
     SmsModule,
+    ActivityModule,
+    ReminderModule,
   ],
   controllers: [AppController],
   providers: [

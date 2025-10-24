@@ -17,6 +17,7 @@ import { ResetPinDto } from '../presentation/dto/reset-pin.dto';
 import { ForgotPinResponseDto } from '../presentation/dto/forgot-pin-response.dto';
 import { JwtPayload } from '../infrastructure/jwt.strategy';
 import { SmsService } from '../../sms/application/sms.service';
+import { ActivityService } from '../../activity/application/activity.service';
 
 @Injectable()
 export class AuthService {
@@ -25,64 +26,108 @@ export class AuthService {
     private jwtService: JwtService,
     private configService: ConfigService,
     private smsService: SmsService,
+    private activityService: ActivityService,
   ) {}
 
-  async login(loginDto: LoginDto): Promise<AuthResponseDto> {
+  async login(
+    loginDto: LoginDto,
+    ipAddress?: string,
+    userAgent?: string,
+  ): Promise<AuthResponseDto> {
     const { phone, pin } = loginDto;
 
-    // Find user by phone
-    const user = await this.prismaService.user.findUnique({
-      where: { phone },
-      include: { cooperative: true },
-    });
+    try {
+      // Find user by phone
+      const user = await this.prismaService.user.findUnique({
+        where: { phone },
+        include: { cooperative: true },
+      });
 
-    if (!user) {
-      throw new UnauthorizedException('Invalid phone number or PIN');
-    }
+      if (!user) {
+        // Log failed login attempt
+        await this.activityService.logFailedLogin(phone, 'User not found', {
+          ipAddress,
+          userAgent,
+        });
+        throw new UnauthorizedException('Invalid phone number or PIN');
+      }
 
-    // Check if user is active
-    if (user.status !== 'ACTIVE') {
-      throw new UnauthorizedException('Account is not active');
-    }
+      // Check if user is active
+      if (user.status !== 'ACTIVE') {
+        // Log failed login attempt
+        await this.activityService.logFailedLogin(phone, 'Account not active', {
+          ipAddress,
+          userAgent,
+        });
+        throw new UnauthorizedException('Account is not active');
+      }
 
-    // Verify PIN
-    const isPinValid = await bcrypt.compare(pin, user.pin);
-    if (!isPinValid) {
-      throw new UnauthorizedException('Invalid phone number or PIN');
-    }
+      // Verify PIN
+      const isPinValid = await bcrypt.compare(pin, user.pin);
+      if (!isPinValid) {
+        // Log failed login attempt
+        await this.activityService.logFailedLogin(phone, 'Invalid PIN', {
+          ipAddress,
+          userAgent,
+        });
+        throw new UnauthorizedException('Invalid phone number or PIN');
+      }
 
-    // Update last login
-    await this.prismaService.user.update({
-      where: { id: user.id },
-      data: { lastLoginAt: new Date() },
-    });
+      // Update last login
+      await this.prismaService.user.update({
+        where: { id: user.id },
+        data: { lastLoginAt: new Date() },
+      });
 
-    // Generate JWT
-    const payload: JwtPayload = {
-      sub: user.id,
-      phone: user.phone,
-      role: user.role,
-      cooperativeId: user.cooperativeId || undefined,
-    };
-
-    const accessToken = this.jwtService.sign(payload);
-    const expiresIn = this.getTokenExpirationInSeconds();
-
-    return {
-      accessToken,
-      tokenType: 'Bearer',
-      expiresIn,
-      user: {
-        id: user.id,
-        phone: user.phone,
-        firstName: user.firstName || undefined,
-        lastName: user.lastName || undefined,
-        email: user.email || undefined,
-        role: user.role,
-        status: user.status,
+      // Log successful login
+      await this.activityService.logLogin({
+        userId: user.id,
         cooperativeId: user.cooperativeId || undefined,
-      },
-    };
+        ipAddress,
+        userAgent,
+      });
+
+      // Generate JWT
+      const payload: JwtPayload = {
+        sub: user.id,
+        phone: user.phone,
+        role: user.role,
+        cooperativeId: user.cooperativeId || undefined,
+      };
+
+      const accessToken = this.jwtService.sign(payload);
+      const expiresIn = this.getTokenExpirationInSeconds();
+
+      return {
+        accessToken,
+        tokenType: 'Bearer',
+        expiresIn,
+        user: {
+          id: user.id,
+          phone: user.phone,
+          firstName: user.firstName || undefined,
+          lastName: user.lastName || undefined,
+          email: user.email || undefined,
+          role: user.role,
+          status: user.status,
+          cooperativeId: user.cooperativeId || undefined,
+        },
+      };
+    } catch (error) {
+      // Re-throw known exceptions
+      if (error instanceof UnauthorizedException) {
+        throw error;
+      }
+
+      // Log unknown errors
+      await this.activityService.logFailedLogin(
+        phone,
+        'System error during login',
+        { ipAddress, userAgent },
+      );
+
+      throw new UnauthorizedException('Login failed');
+    }
   }
 
   async validateUser(phone: string, pin: string) {
@@ -121,7 +166,11 @@ export class AuthService {
     return 7 * 24 * 60 * 60; // default 7 days
   }
 
-  async forgotPin(forgotPinDto: ForgotPinDto): Promise<ForgotPinResponseDto> {
+  async forgotPin(
+    forgotPinDto: ForgotPinDto,
+    ipAddress?: string,
+    userAgent?: string,
+  ): Promise<ForgotPinResponseDto> {
     const { phone } = forgotPinDto;
 
     // Find user by phone
@@ -152,6 +201,17 @@ export class AuthService {
         passwordResetExpires: resetTokenExpires,
       },
     });
+
+    // Log PIN reset request
+    await this.activityService.logPinReset(
+      {
+        userId: user.id,
+        cooperativeId: user.cooperativeId || undefined,
+        ipAddress,
+        userAgent,
+      },
+      true, // isRequested = true
+    );
 
     // Send SMS with reset token
     try {
@@ -185,7 +245,11 @@ export class AuthService {
     };
   }
 
-  async resetPin(resetPinDto: ResetPinDto): Promise<{ message: string }> {
+  async resetPin(
+    resetPinDto: ResetPinDto,
+    ipAddress?: string,
+    userAgent?: string,
+  ): Promise<{ message: string }> {
     const { phone, resetToken, newPin } = resetPinDto;
 
     // Find user by phone
@@ -231,6 +295,17 @@ export class AuthService {
         passwordResetExpires: null,
       },
     });
+
+    // Log PIN reset completion
+    await this.activityService.logPinReset(
+      {
+        userId: user.id,
+        cooperativeId: user.cooperativeId || undefined,
+        ipAddress,
+        userAgent,
+      },
+      false, // isRequested = false (completed)
+    );
 
     // Send SMS confirmation for successful PIN reset
     try {
