@@ -253,6 +253,28 @@ export class PaymentTypeService {
     return result;
   }
 
+  async findByIdPublic(
+    id: string,
+    cooperativeId?: string,
+  ): Promise<PaymentTypeResponseDto> {
+    const paymentType = await this.prismaService.paymentType.findUnique({
+      where: { id },
+    });
+
+    if (!paymentType) {
+      throw new NotFoundException('Payment type not found');
+    }
+
+    // If cooperativeId is provided, validate it matches
+    if (cooperativeId && paymentType.cooperativeId !== cooperativeId) {
+      throw new NotFoundException(
+        'Payment type not found in specified cooperative',
+      );
+    }
+
+    return this.mapToResponseDto(paymentType);
+  }
+
   private async clearPaymentTypesCache(cooperativeId: string): Promise<void> {
     // Use the new cache service for invalidation
     await this.paymentCacheService.invalidateCooperativePaymentTypes(

@@ -7,6 +7,7 @@ import {
   Query,
   Patch,
   UseGuards,
+  BadRequestException,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -21,20 +22,20 @@ import { PaginationDto } from '../../../shared/dto/pagination.dto';
 import { PaginatedResponseDto } from '../../../shared/dto/paginated-response.dto';
 import { JwtAuthGuard } from '../../../shared/guards/jwt-auth.guard';
 import { RolesGuard } from '../../../shared/guards/roles.guard';
-import { Roles } from '../../../shared/decorators/auth.decorator';
+import { Roles, Public } from '../../../shared/decorators/auth.decorator';
 import { CurrentUser } from '../../../shared/decorators/current-user.decorator';
 import { AuthenticatedUser } from '../../../shared/decorators/current-user.decorator';
 import { UserRole } from '@prisma/client';
 
 @ApiTags('Payment Types')
 @Controller('payment-types')
-@UseGuards(JwtAuthGuard, RolesGuard)
-@ApiBearerAuth()
 export class PaymentTypeController {
   constructor(private paymentTypeService: PaymentTypeService) {}
 
   @Post()
+  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ORGANIZATION_ADMIN', 'SUPER_ADMIN')
+  @ApiBearerAuth()
   @ApiOperation({ summary: 'Create a new payment type' })
   @ApiResponse({
     status: 201,
@@ -53,7 +54,11 @@ export class PaymentTypeController {
   }
 
   @Get()
-  @ApiOperation({ summary: 'Get all payment types for current cooperative' })
+  @Public()
+  @ApiOperation({
+    summary: 'Get all payment types for specified cooperative',
+    description: 'Public endpoint to get payment types by cooperative ID',
+  })
   @ApiResponse({
     status: 200,
     description: 'Payment types retrieved successfully',
@@ -62,20 +67,24 @@ export class PaymentTypeController {
   async findAll(
     @Query() paginationDto: PaginationDto,
     @Query('includeInactive') includeInactive: boolean = false,
-    @CurrentUser() currentUser: AuthenticatedUser,
+    @Query('cooperativeId') cooperativeId: string,
   ): Promise<PaginatedResponseDto<PaymentTypeResponseDto>> {
+    if (!cooperativeId) {
+      throw new BadRequestException('Cooperative ID is required');
+    }
     return this.paymentTypeService.findAllByCooperative(
-      currentUser.cooperativeId!,
+      cooperativeId,
       paginationDto,
       includeInactive,
     );
   }
 
   @Get('active')
+  @Public()
   @ApiOperation({
     summary: 'Get active payment types (optimized for USSD/mobile)',
     description:
-      'Returns only active payment types, optimized with caching for USSD and mobile apps',
+      'Public endpoint returning only active payment types, optimized with caching for USSD and mobile apps',
   })
   @ApiResponse({
     status: 200,
@@ -83,15 +92,20 @@ export class PaymentTypeController {
     type: [PaymentTypeResponseDto],
   })
   async getActive(
-    @CurrentUser() currentUser: AuthenticatedUser,
+    @Query('cooperativeId') cooperativeId: string,
   ): Promise<PaymentTypeResponseDto[]> {
-    return this.paymentTypeService.getActivePaymentTypesForCache(
-      currentUser.cooperativeId!,
-    );
+    if (!cooperativeId) {
+      throw new BadRequestException('Cooperative ID is required');
+    }
+    return this.paymentTypeService.getActivePaymentTypesForCache(cooperativeId);
   }
 
   @Get(':id')
-  @ApiOperation({ summary: 'Get payment type by ID' })
+  @Public()
+  @ApiOperation({
+    summary: 'Get payment type by ID',
+    description: 'Public endpoint to get a specific payment type by its ID',
+  })
   @ApiResponse({
     status: 200,
     description: 'Payment type retrieved successfully',
@@ -99,17 +113,15 @@ export class PaymentTypeController {
   })
   async findOne(
     @Param('id') id: string,
-    @CurrentUser() currentUser: AuthenticatedUser,
+    @Query('cooperativeId') cooperativeId?: string,
   ): Promise<PaymentTypeResponseDto> {
-    return this.paymentTypeService.findById(
-      id,
-      currentUser.cooperativeId!,
-      currentUser.role as UserRole,
-    );
+    return await this.paymentTypeService.findByIdPublic(id, cooperativeId);
   }
 
   @Patch(':id/status')
+  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ORGANIZATION_ADMIN', 'SUPER_ADMIN')
+  @ApiBearerAuth()
   @ApiOperation({ summary: 'Update payment type status' })
   @ApiResponse({
     status: 200,
