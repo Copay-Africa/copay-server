@@ -1,14 +1,8 @@
 {
     "version": 2,
-    "builds": [
-        {
-            "src": "api/index.ts",
-            "use": "@vercel/node"
-        }
-    ],
     "routes": [
         {
-            "src": "\\/(.*)",
+            "src": "/(.*)",
             "dest": "api/index.ts",
             "methods": [
                 "GET",
@@ -21,9 +15,13 @@
             ]
         }
     ],
-    
     "env": {
         "NODE_ENV": "production"
+    },
+    "functions": {
+        "api/index.ts": {
+            "maxDuration": 30
+        }
     },
     "installCommand": "npm install",
     "buildCommand": "npm run vercel-build"
