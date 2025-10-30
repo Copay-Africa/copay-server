@@ -1,9 +1,15 @@
 {
     "version": 2,
+    "builds": [
+        {
+            "src": "api/index.ts",
+            "use": "@vercel/node"
+        }
+    ],
     "routes": [
         {
             "src": "\\/(.*)",
-            "dest": "dist/api/index.js",
+            "dest": "api/index.ts",
             "methods": [
                 "GET",
                 "POST",
@@ -15,15 +21,14 @@
             ]
         }
     ],
-    "env": {
-        "NODE_ENV": "production"
-    },
     "functions": {
-        "dist/api/index.js": {
+        "api/index.ts": {
             "maxDuration": 60
         }
     },
-    "outputDirectory": "dist",
+    "env": {
+        "NODE_ENV": "production"
+    },
     "installCommand": "npm install",
     "buildCommand": "npm run vercel-build"
 }
