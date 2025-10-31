@@ -403,6 +403,228 @@ curl -X GET "https://api.copay.com/payment-types/507f1f77bcf86cd799439011?cooper
 
 ---
 
+### Organization Payment Management
+
+**Note:** These endpoints are available only to `ORGANIZATION_ADMIN` and `SUPER_ADMIN` roles.
+
+#### Get Organization Payments
+
+**GET** `/payments/organization` 🔒 *Admin Only*
+
+**Description:** Organization admins can view all payments from their cooperative tenants with advanced filtering options.
+
+**Required Roles:** `ORGANIZATION_ADMIN`, `SUPER_ADMIN`
+
+**Query Parameters:**
+
+- `page`, `limit` (pagination)
+- `search` (optional): Search by description, reference, sender name, or payment type
+- `status` (optional): Filter by payment status
+- `paymentMethod` (optional): Filter by payment method
+- `senderId` (optional): Filter by specific sender
+- `paymentTypeId` (optional): Filter by payment type
+- `fromDate` (optional): Start date filter (ISO 8601)
+- `toDate` (optional): End date filter (ISO 8601)
+- `sortBy`, `sortOrder` (optional): Sort results
+
+```bash
+curl -X GET "https://api.copay.com/payments/organization?page=1&limit=20&status=COMPLETED&fromDate=2025-10-01T00:00:00Z" \
+  -H "Authorization: Bearer <admin_token>"
+```
+
+**Response:**
+
+```json
+{
+  "data": [
+    {
+      "id": "67890abcdef12345",
+      "amount": 50000,
+      "status": "COMPLETED",
+      "description": "Monthly rent payment",
+      "paymentMethod": "MOBILE_MONEY_MTN",
+      "paymentReference": "PAY_20251016_001",
+      "paymentType": {
+        "id": "507f1f77bcf86cd799439011",
+        "name": "Monthly Rent",
+        "description": "Monthly rental payment"
+      },
+      "sender": {
+        "id": "507f1f77bcf86cd799439013",
+        "firstName": "Jean",
+        "lastName": "Mukamana",
+        "phone": "+250788123456"
+      },
+      "cooperative": {
+        "id": "507f1f77bcf86cd799439012",
+        "name": "Default Cooperative",
+        "code": "DEFAULT_COOP"
+      },
+      "latestTransaction": {
+        "id": "transaction_123",
+        "status": "COMPLETED",
+        "gatewayTransactionId": "IREMBO_TXN_123456",
+        "createdAt": "2025-10-16T10:30:00Z"
+      },
+      "paidAt": "2025-10-16T10:35:00Z",
+      "createdAt": "2025-10-16T10:30:00Z",
+      "updatedAt": "2025-10-16T10:35:00Z"
+    }
+  ],
+  "meta": {
+    "total": 150,
+    "page": 1,
+    "limit": 20,
+    "totalPages": 8,
+    "hasNextPage": true,
+    "hasPreviousPage": false
+  }
+}
+```
+
+#### Get Organization Payment Details
+
+**GET** `/payments/organization/:id` 🔒 *Admin Only*
+
+**Description:** Organization admins can view detailed payment information including full transaction history.
+
+```bash
+curl -X GET "https://api.copay.com/payments/organization/67890abcdef12345" \
+  -H "Authorization: Bearer <admin_token>"
+```
+
+**Response:**
+
+```json
+{
+  "id": "67890abcdef12345",
+  "amount": 50000,
+  "status": "COMPLETED",
+  "description": "Monthly rent payment",
+  "paymentMethod": "MOBILE_MONEY_MTN",
+  "paymentReference": "PAY_20251016_001",
+  "paymentType": {
+    "id": "507f1f77bcf86cd799439011",
+    "name": "Monthly Rent",
+    "description": "Monthly rental payment",
+    "amount": 50000,
+    "amountType": "FIXED"
+  },
+  "sender": {
+    "id": "507f1f77bcf86cd799439013",
+    "firstName": "Jean",
+    "lastName": "Mukamana",
+    "phone": "+250788123456",
+    "email": "jean.mukamana@example.com"
+  },
+  "cooperative": {
+    "id": "507f1f77bcf86cd799439012",
+    "name": "Default Cooperative",
+    "code": "DEFAULT_COOP"
+  },
+  "transactions": [
+    {
+      "id": "transaction_123",
+      "amount": 50000,
+      "status": "COMPLETED",
+      "paymentMethod": "MOBILE_MONEY_MTN",
+      "gatewayTransactionId": "IREMBO_TXN_123456",
+      "gatewayReference": "INV_1729123456_abc123",
+      "gatewayResponse": {
+        "transaction_id": "IREMBO_TXN_123456",
+        "status": "successful",
+        "phone_number": "+250788123456"
+      },
+      "processingStartedAt": "2025-10-16T10:30:15Z",
+      "processingCompletedAt": "2025-10-16T10:35:22Z",
+      "failureReason": null,
+      "webhookReceived": true,
+      "webhookReceivedAt": "2025-10-16T10:35:22Z",
+      "createdAt": "2025-10-16T10:30:00Z",
+      "updatedAt": "2025-10-16T10:35:22Z"
+    }
+  ],
+  "paidAt": "2025-10-16T10:35:00Z",
+  "createdAt": "2025-10-16T10:30:00Z",
+  "updatedAt": "2025-10-16T10:35:00Z"
+}
+```
+
+#### Get Organization Payment Statistics
+
+**GET** `/payments/organization/stats` 🔒 *Admin Only*
+
+**Description:** Get payment summary statistics for the organization including total amounts, payment counts, and status breakdown.
+
+**Query Parameters:**
+
+- `fromDate` (optional): Start date for statistics (ISO 8601)
+- `toDate` (optional): End date for statistics (ISO 8601)
+
+```bash
+curl -X GET "https://api.copay.com/payments/organization/stats?fromDate=2025-10-01T00:00:00Z&toDate=2025-10-31T23:59:59Z" \
+  -H "Authorization: Bearer <admin_token>"
+```
+
+**Response:**
+
+```json
+{
+  "summary": {
+    "totalPayments": 245,
+    "totalAmount": 12250000,
+    "averageAmount": 50000
+  },
+  "statusBreakdown": [
+    {
+      "status": "COMPLETED",
+      "count": 200,
+      "totalAmount": 10000000
+    },
+    {
+      "status": "PENDING",
+      "count": 25,
+      "totalAmount": 1250000
+    },
+    {
+      "status": "FAILED",
+      "count": 20,
+      "totalAmount": 1000000
+    }
+  ],
+  "methodBreakdown": [
+    {
+      "method": "MOBILE_MONEY_MTN",
+      "count": 150,
+      "totalAmount": 7500000
+    },
+    {
+      "method": "MOBILE_MONEY_AIRTEL",
+      "count": 70,
+      "totalAmount": 3500000
+    },
+    {
+      "method": "BANK_BK",
+      "count": 25,
+      "totalAmount": 1250000
+    }
+  ],
+  "recentPayments": [
+    {
+      "id": "67890abcdef12345",
+      "amount": 50000,
+      "status": "COMPLETED",
+      "paymentType": "Monthly Rent",
+      "sender": "Jean Mukamana",
+      "senderPhone": "+250788123456",
+      "createdAt": "2025-10-16T10:30:00Z"
+    }
+  ]
+}
+```
+
+---
+
 ### Activities
 
 The Activity API provides comprehensive user activity tracking and audit logging.

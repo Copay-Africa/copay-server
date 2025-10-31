@@ -23,6 +23,7 @@ import { RolesGuard } from '../../../shared/guards/roles.guard';
 import { CurrentUser } from '../../../shared/decorators/current-user.decorator';
 import { AuthenticatedUser } from '../../../shared/decorators/current-user.decorator';
 import { UserRole } from '@prisma/client';
+import { Roles } from '../../../shared/decorators/auth.decorator';
 
 @ApiTags('Payments')
 @Controller('payments')
@@ -72,6 +73,88 @@ export class PaymentController {
       currentUser.id,
       currentUser.cooperativeId!,
       paginationDto,
+      currentUser.role as UserRole,
+    );
+  }
+
+  @Get('organization')
+  @Roles(UserRole.ORGANIZATION_ADMIN, UserRole.SUPER_ADMIN)
+  @ApiOperation({
+    summary: 'Get all payments for organization',
+    description:
+      'Organization admins can view all payments from their cooperative tenants with advanced filtering options',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Organization payments retrieved successfully',
+    type: PaginatedResponseDto<PaymentResponseDto>,
+  })
+  async findOrganizationPayments(
+    @CurrentUser() currentUser: AuthenticatedUser,
+    @Query() paginationDto: PaginationDto,
+    @Query('status') status?: string,
+    @Query('paymentMethod') paymentMethod?: string,
+    @Query('senderId') senderId?: string,
+    @Query('paymentTypeId') paymentTypeId?: string,
+    @Query('fromDate') fromDate?: string,
+    @Query('toDate') toDate?: string,
+  ): Promise<PaginatedResponseDto<PaymentResponseDto>> {
+    return this.paymentService.findOrganizationPayments(
+      currentUser.cooperativeId!,
+      paginationDto,
+      {
+        status,
+        paymentMethod,
+        senderId,
+        paymentTypeId,
+        fromDate,
+        toDate,
+      },
+      currentUser.role as UserRole,
+    );
+  }
+
+  @Get('organization/stats')
+  @Roles(UserRole.ORGANIZATION_ADMIN, UserRole.SUPER_ADMIN)
+  @ApiOperation({
+    summary: 'Get payment statistics for organization',
+    description:
+      'Get payment summary statistics for the organization including total amounts, payment counts, and status breakdown',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Payment statistics retrieved successfully',
+  })
+  async getOrganizationPaymentStats(
+    @CurrentUser() currentUser: AuthenticatedUser,
+    @Query('fromDate') fromDate?: string,
+    @Query('toDate') toDate?: string,
+  ): Promise<any> {
+    return this.paymentService.getOrganizationPaymentStats(
+      currentUser.cooperativeId!,
+      { fromDate, toDate },
+    );
+  }
+
+  @Get('organization/:id')
+  @Roles(UserRole.ORGANIZATION_ADMIN, UserRole.SUPER_ADMIN)
+  @ApiOperation({
+    summary: 'Get payment details for organization',
+    description:
+      'Organization admins can view detailed payment information including transaction history',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Payment details retrieved successfully',
+    type: PaymentResponseDto,
+  })
+  async findOrganizationPayment(
+    @Param('id') id: string,
+    @CurrentUser() currentUser: AuthenticatedUser,
+  ): Promise<PaymentResponseDto> {
+    return this.paymentService.findOrganizationPaymentById(
+      id,
+      currentUser.cooperativeId!,
       currentUser.role as UserRole,
     );
   }

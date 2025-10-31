@@ -443,6 +443,354 @@ export class PaymentService {
     );
   }
 
+  async findOrganizationPayments(
+    cooperativeId: string,
+    paginationDto: PaginationDto,
+    filters: {
+      status?: string;
+      paymentMethod?: string;
+      senderId?: string;
+      paymentTypeId?: string;
+      fromDate?: string;
+      toDate?: string;
+    },
+    currentUserRole?: UserRole,
+  ): Promise<PaginatedResponseDto<PaymentResponseDto>> {
+    // Only allow organization admins and super admins
+    if (
+      currentUserRole !== UserRole.ORGANIZATION_ADMIN &&
+      currentUserRole !== UserRole.SUPER_ADMIN
+    ) {
+      throw new BadRequestException(
+        'Insufficient permissions to view organization payments',
+      );
+    }
+
+    const { page, limit, search, sortBy, sortOrder, skip } = paginationDto;
+
+    // Build where clause
+    const where: any = {};
+
+    // Filter by cooperative for org admins
+    if (currentUserRole === UserRole.ORGANIZATION_ADMIN) {
+      where.cooperativeId = cooperativeId;
+    }
+
+    // Apply additional filters
+    if (filters.status) {
+      where.status = filters.status;
+    }
+
+    if (filters.paymentMethod) {
+      where.paymentMethod = filters.paymentMethod;
+    }
+
+    if (filters.senderId) {
+      where.senderId = filters.senderId;
+    }
+
+    if (filters.paymentTypeId) {
+      where.paymentTypeId = filters.paymentTypeId;
+    }
+
+    if (filters.fromDate || filters.toDate) {
+      where.createdAt = {};
+      if (filters.fromDate) {
+        where.createdAt.gte = new Date(filters.fromDate);
+      }
+      if (filters.toDate) {
+        where.createdAt.lte = new Date(filters.toDate);
+      }
+    }
+
+    if (search) {
+      where.OR = [
+        { description: { contains: search, mode: 'insensitive' } },
+        { paymentReference: { contains: search, mode: 'insensitive' } },
+        { sender: { firstName: { contains: search, mode: 'insensitive' } } },
+        { sender: { lastName: { contains: search, mode: 'insensitive' } } },
+        { sender: { phone: { contains: search, mode: 'insensitive' } } },
+        { paymentType: { name: { contains: search, mode: 'insensitive' } } },
+      ];
+    }
+
+    // Build order by clause
+    const orderBy: any = {};
+    if (sortBy) {
+      orderBy[sortBy] = sortOrder;
+    } else {
+      orderBy.createdAt = 'desc';
+    }
+
+    // Execute queries
+    const [payments, total] = await Promise.all([
+      this.prismaService.payment.findMany({
+        where,
+        orderBy,
+        skip,
+        take: limit,
+        include: {
+          paymentType: {
+            select: {
+              id: true,
+              name: true,
+              description: true,
+            },
+          },
+          sender: {
+            select: {
+              id: true,
+              firstName: true,
+              lastName: true,
+              phone: true,
+            },
+          },
+          cooperative: {
+            select: {
+              id: true,
+              name: true,
+              code: true,
+            },
+          },
+          transactions: {
+            select: {
+              id: true,
+              status: true,
+              gatewayTransactionId: true,
+              createdAt: true,
+            },
+            orderBy: {
+              createdAt: 'desc',
+            },
+            take: 1,
+          },
+        },
+      }),
+      this.prismaService.payment.count({ where }),
+    ]);
+
+    const paymentResponses = payments.map((payment) => {
+      const response = this.mapToResponseDto(payment);
+      // Add latest transaction info
+      if (payment.transactions && payment.transactions.length > 0) {
+        (response as any).latestTransaction = payment.transactions[0];
+      }
+      return response;
+    });
+
+    return new PaginatedResponseDto(
+      paymentResponses,
+      total,
+      page || 1,
+      limit || 10,
+    );
+  }
+
+  async findOrganizationPaymentById(
+    id: string,
+    cooperativeId: string,
+    currentUserRole?: UserRole,
+  ): Promise<PaymentResponseDto> {
+    // Only allow organization admins and super admins
+    if (
+      currentUserRole !== UserRole.ORGANIZATION_ADMIN &&
+      currentUserRole !== UserRole.SUPER_ADMIN
+    ) {
+      throw new BadRequestException(
+        'Insufficient permissions to view organization payment details',
+      );
+    }
+
+    const payment = await this.prismaService.payment.findUnique({
+      where: { id },
+      include: {
+        paymentType: {
+          select: {
+            id: true,
+            name: true,
+            description: true,
+            amount: true,
+            amountType: true,
+          },
+        },
+        sender: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            phone: true,
+            email: true,
+          },
+        },
+        cooperative: {
+          select: {
+            id: true,
+            name: true,
+            code: true,
+          },
+        },
+        transactions: {
+          select: {
+            id: true,
+            amount: true,
+            status: true,
+            paymentMethod: true,
+            gatewayTransactionId: true,
+            gatewayReference: true,
+            gatewayResponse: true,
+            processingStartedAt: true,
+            processingCompletedAt: true,
+            failureReason: true,
+            webhookReceived: true,
+            webhookReceivedAt: true,
+            createdAt: true,
+            updatedAt: true,
+          },
+          orderBy: {
+            createdAt: 'desc',
+          },
+        },
+      },
+    });
+
+    if (!payment) {
+      throw new NotFoundException('Payment not found');
+    }
+
+    // Check access permissions - org admins can only see payments in their cooperative
+    if (
+      currentUserRole === UserRole.ORGANIZATION_ADMIN &&
+      payment.cooperativeId !== cooperativeId
+    ) {
+      throw new NotFoundException('Payment not found');
+    }
+
+    const response = this.mapToResponseDto(payment);
+    // Add transaction details for organization view
+    (response as any).transactions = payment.transactions;
+
+    return response;
+  }
+
+  async getOrganizationPaymentStats(
+    cooperativeId: string,
+    filters: {
+      fromDate?: string;
+      toDate?: string;
+    },
+  ): Promise<any> {
+    const where: any = {
+      cooperativeId,
+    };
+
+    if (filters.fromDate || filters.toDate) {
+      where.createdAt = {};
+      if (filters.fromDate) {
+        where.createdAt.gte = new Date(filters.fromDate);
+      }
+      if (filters.toDate) {
+        where.createdAt.lte = new Date(filters.toDate);
+      }
+    }
+
+    // Get payment statistics
+    const [
+      totalPayments,
+      totalAmount,
+      statusBreakdown,
+      methodBreakdown,
+      recentPayments,
+    ] = await Promise.all([
+      // Total count
+      this.prismaService.payment.count({ where }),
+
+      // Total amount aggregate
+      this.prismaService.payment.aggregate({
+        where,
+        _sum: {
+          amount: true,
+        },
+        _avg: {
+          amount: true,
+        },
+      }),
+
+      // Status breakdown
+      this.prismaService.payment.groupBy({
+        by: ['status'],
+        where,
+        _count: {
+          status: true,
+        },
+        _sum: {
+          amount: true,
+        },
+      }),
+
+      // Payment method breakdown
+      this.prismaService.payment.groupBy({
+        by: ['paymentMethod'],
+        where,
+        _count: {
+          paymentMethod: true,
+        },
+        _sum: {
+          amount: true,
+        },
+      }),
+
+      // Recent payments (last 10)
+      this.prismaService.payment.findMany({
+        where,
+        orderBy: {
+          createdAt: 'desc',
+        },
+        take: 10,
+        include: {
+          sender: {
+            select: {
+              firstName: true,
+              lastName: true,
+              phone: true,
+            },
+          },
+          paymentType: {
+            select: {
+              name: true,
+            },
+          },
+        },
+      }),
+    ]);
+
+    return {
+      summary: {
+        totalPayments,
+        totalAmount: totalAmount._sum.amount || 0,
+        averageAmount: totalAmount._avg.amount || 0,
+      },
+      statusBreakdown: statusBreakdown.map((item) => ({
+        status: item.status,
+        count: item._count.status,
+        totalAmount: item._sum.amount || 0,
+      })),
+      methodBreakdown: methodBreakdown.map((item) => ({
+        method: item.paymentMethod,
+        count: item._count.paymentMethod,
+        totalAmount: item._sum.amount || 0,
+      })),
+      recentPayments: recentPayments.map((payment) => ({
+        id: payment.id,
+        amount: payment.amount,
+        status: payment.status,
+        paymentType: payment.paymentType.name,
+        sender: `${payment.sender.firstName} ${payment.sender.lastName}`,
+        senderPhone: payment.sender.phone,
+        createdAt: payment.createdAt,
+      })),
+    };
+  }
+
   async handleWebhook(webhookDto: PaymentWebhookDto): Promise<void> {
     // Find payment transaction by gateway transaction ID
     const paymentTransaction =
