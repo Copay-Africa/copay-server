@@ -14,6 +14,7 @@ import { UssdModule } from './modules/ussd/ussd.module';
 import { SmsModule } from './modules/sms/sms.module';
 import { ActivityModule } from './modules/activity/activity.module';
 import { ReminderModule } from './modules/reminder/reminder.module';
+import { ComplaintModule } from './modules/complaint/complaint.module';
 import { JwtAuthGuard } from './shared/guards/jwt-auth.guard';
 import { CacheConfigModule } from './config/cache.module';
 import {
@@ -81,6 +82,7 @@ import {
     SmsModule,
     ActivityModule,
     ReminderModule,
+    ComplaintModule,
   ],
   controllers: [AppController],
   providers: [

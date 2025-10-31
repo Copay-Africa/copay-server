@@ -13,6 +13,7 @@
    - [Payments](#payments)
    - [Activities](#activities)
    - [Reminders](#reminders)
+   - [Complaints](#complaints)
    - [Webhooks](#webhooks)
 5. [Data Models](#data-models)
 6. [Security](#security)
@@ -761,6 +762,236 @@ The Reminder API provides automated payment reminders with multi-channel notific
 #### Delete Reminder
 
 **DELETE** `/reminders/:id`
+
+---
+
+### Complaints
+
+The Complaints API provides comprehensive complaint management for both tenants and organization administrators.
+
+#### Create Complaint
+
+**POST** `/complaints`
+
+**Required Roles:** `TENANT`, `ORGANIZATION_ADMIN`, `SUPER_ADMIN`
+
+```json
+{
+  "title": "Water pressure issue in apartment 301",
+  "description": "The water pressure in the bathroom has been very low for the past week. It affects daily activities like showering and washing dishes.",
+  "priority": "MEDIUM",
+  "attachments": [
+    {
+      "filename": "water_issue_photo.jpg",
+      "url": "https://storage.example.com/complaints/photo1.jpg",
+      "size": 2048576,
+      "contentType": "image/jpeg"
+    }
+  ]
+}
+```
+
+**Priority Levels:**
+- `LOW`, `MEDIUM`, `HIGH`, `URGENT`
+
+**Response:**
+
+```json
+{
+  "id": "507f1f77bcf86cd799439015",
+  "title": "Water pressure issue in apartment 301",
+  "description": "The water pressure in the bathroom has been very low for the past week.",
+  "status": "OPEN",
+  "priority": "MEDIUM",
+  "resolution": null,
+  "resolvedAt": null,
+  "attachments": [
+    {
+      "filename": "water_issue_photo.jpg",
+      "url": "https://storage.example.com/complaints/photo1.jpg",
+      "size": 2048576,
+      "contentType": "image/jpeg"
+    }
+  ],
+  "user": {
+    "id": "507f1f77bcf86cd799439013",
+    "firstName": "Jean",
+    "lastName": "Mukamana",
+    "phone": "+250788123456"
+  },
+  "cooperative": {
+    "id": "507f1f77bcf86cd799439012",
+    "name": "Default Cooperative",
+    "code": "DEFAULT_COOP"
+  },
+  "createdAt": "2025-10-31T10:30:00Z",
+  "updatedAt": "2025-10-31T10:30:00Z"
+}
+```
+
+#### Get All Complaints
+
+**GET** `/complaints`
+
+**Access Control:**
+- **TENANT**: See only their own complaints
+- **ORGANIZATION_ADMIN**: See all complaints within their cooperative
+- **SUPER_ADMIN**: See all complaints across all cooperatives
+
+**Query Parameters:**
+
+- `page`, `limit`, `search`, `sortBy`, `sortOrder` (pagination)
+- `status` (optional): Filter by complaint status (`OPEN`, `IN_PROGRESS`, `RESOLVED`, `CLOSED`)
+- `priority` (optional): Filter by priority (`LOW`, `MEDIUM`, `HIGH`, `URGENT`)
+- `userId` (optional): Filter by user ID (admin only)
+- `fromDate`, `toDate` (optional): Date range filter (ISO 8601)
+
+#### Get My Complaints
+
+**GET** `/complaints/my`
+
+**Description:** Get complaints submitted by the current user (regardless of role).
+
+#### Get Organization Complaints
+
+**GET** `/complaints/organization` 🔒 *Admin Only*
+
+**Required Roles:** `ORGANIZATION_ADMIN`, `SUPER_ADMIN`
+
+**Description:** Organization admins can view all complaints from their cooperative tenants.
+
+```bash
+curl -X GET "https://api.copay.com/complaints/organization?status=OPEN&priority=HIGH&page=1&limit=20" \
+  -H "Authorization: Bearer <admin_token>"
+```
+
+#### Get Organization Complaint Statistics
+
+**GET** `/complaints/organization/stats` 🔒 *Admin Only*
+
+**Required Roles:** `ORGANIZATION_ADMIN`, `SUPER_ADMIN`
+
+**Query Parameters:**
+
+- `fromDate` (optional): Start date for statistics (ISO 8601)
+- `toDate` (optional): End date for statistics (ISO 8601)
+
+```bash
+curl -X GET "https://api.copay.com/complaints/organization/stats?fromDate=2025-10-01T00:00:00Z" \
+  -H "Authorization: Bearer <admin_token>"
+```
+
+**Response:**
+
+```json
+{
+  "summary": {
+    "totalComplaints": 45
+  },
+  "statusBreakdown": [
+    {
+      "status": "OPEN",
+      "count": 15
+    },
+    {
+      "status": "IN_PROGRESS",
+      "count": 12
+    },
+    {
+      "status": "RESOLVED",
+      "count": 15
+    },
+    {
+      "status": "CLOSED",
+      "count": 3
+    }
+  ],
+  "priorityBreakdown": [
+    {
+      "priority": "HIGH",
+      "count": 8
+    },
+    {
+      "priority": "MEDIUM",
+      "count": 25
+    },
+    {
+      "priority": "LOW",
+      "count": 12
+    }
+  ],
+  "recentComplaints": [
+    {
+      "id": "507f1f77bcf86cd799439015",
+      "title": "Water pressure issue in apartment 301",
+      "status": "OPEN",
+      "priority": "MEDIUM",
+      "user": "Jean Mukamana",
+      "userPhone": "+250788123456",
+      "createdAt": "2025-10-31T10:30:00Z"
+    }
+  ]
+}
+```
+
+#### Get Complaint by ID
+
+**GET** `/complaints/:id`
+
+**Access Control:**
+- **TENANT**: Can only view their own complaints
+- **ORGANIZATION_ADMIN**: Can view complaints within their cooperative
+- **SUPER_ADMIN**: Can view any complaint
+
+#### Update Complaint Status
+
+**PATCH** `/complaints/:id/status` 🔒 *Admin Only*
+
+**Required Roles:** `ORGANIZATION_ADMIN`, `SUPER_ADMIN`
+
+**Description:** Organization admins can update complaint status and add resolution messages.
+
+```json
+{
+  "status": "IN_PROGRESS",
+  "resolution": "Maintenance team has been notified and will address the water pressure issue within 24 hours."
+}
+```
+
+**Status Values:**
+- `OPEN` - Newly submitted complaint
+- `IN_PROGRESS` - Being worked on by maintenance/admin
+- `RESOLVED` - Issue has been fixed
+- `CLOSED` - Complaint is closed (resolved or dismissed)
+
+**Response:**
+
+```json
+{
+  "id": "507f1f77bcf86cd799439015",
+  "title": "Water pressure issue in apartment 301",
+  "description": "The water pressure in the bathroom has been very low for the past week.",
+  "status": "IN_PROGRESS",
+  "priority": "MEDIUM",
+  "resolution": "Maintenance team has been notified and will address the water pressure issue within 24 hours.",
+  "resolvedAt": null,
+  "user": {
+    "id": "507f1f77bcf86cd799439013",
+    "firstName": "Jean",
+    "lastName": "Mukamana",
+    "phone": "+250788123456"
+  },
+  "cooperative": {
+    "id": "507f1f77bcf86cd799439012",
+    "name": "Default Cooperative",
+    "code": "DEFAULT_COOP"
+  },
+  "createdAt": "2025-10-31T10:30:00Z",
+  "updatedAt": "2025-10-31T14:15:00Z"
+}
+```
+
+**Note:** When status is set to `RESOLVED` or `CLOSED`, the `resolvedAt` timestamp is automatically set.
 
 ---
 
