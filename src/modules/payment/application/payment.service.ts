@@ -693,102 +693,120 @@ export class PaymentService {
       }
     }
 
-    // Get payment statistics
-    const [
-      totalPayments,
-      totalAmount,
-      statusBreakdown,
-      methodBreakdown,
-      recentPayments,
-    ] = await Promise.all([
-      // Total count
-      this.prismaService.payment.count({ where }),
-
-      // Total amount aggregate
-      this.prismaService.payment.aggregate({
-        where,
-        _sum: {
-          amount: true,
-        },
-        _avg: {
-          amount: true,
-        },
-      }),
-
-      // Status breakdown
-      this.prismaService.payment.groupBy({
-        by: ['status'],
-        where,
-        _count: {
-          status: true,
-        },
-        _sum: {
-          amount: true,
-        },
-      }),
-
-      // Payment method breakdown
-      this.prismaService.payment.groupBy({
-        by: ['paymentMethod'],
-        where,
-        _count: {
-          paymentMethod: true,
-        },
-        _sum: {
-          amount: true,
-        },
-      }),
-
-      // Recent payments (last 10)
-      this.prismaService.payment.findMany({
-        where,
-        orderBy: {
-          createdAt: 'desc',
-        },
-        take: 10,
-        include: {
-          sender: {
-            select: {
-              firstName: true,
-              lastName: true,
-              phone: true,
-            },
-          },
-          paymentType: {
-            select: {
-              name: true,
-            },
-          },
-        },
-      }),
-    ]);
-
-    return {
-      summary: {
+    try {
+      // Get payment statistics
+      const [
         totalPayments,
-        totalAmount: totalAmount._sum.amount || 0,
-        averageAmount: totalAmount._avg.amount || 0,
-      },
-      statusBreakdown: statusBreakdown.map((item) => ({
-        status: item.status,
-        count: item._count.status,
-        totalAmount: item._sum.amount || 0,
-      })),
-      methodBreakdown: methodBreakdown.map((item) => ({
-        method: item.paymentMethod,
-        count: item._count.paymentMethod,
-        totalAmount: item._sum.amount || 0,
-      })),
-      recentPayments: recentPayments.map((payment) => ({
-        id: payment.id,
-        amount: payment.amount,
-        status: payment.status,
-        paymentType: payment.paymentType.name,
-        sender: `${payment.sender.firstName} ${payment.sender.lastName}`,
-        senderPhone: payment.sender.phone,
-        createdAt: payment.createdAt,
-      })),
-    };
+        totalAmount,
+        statusBreakdown,
+        methodBreakdown,
+        recentPayments,
+      ] = await Promise.all([
+        // Total count
+        this.prismaService.payment.count({ where }),
+
+        // Total amount aggregate
+        this.prismaService.payment.aggregate({
+          where,
+          _sum: {
+            amount: true,
+          },
+          _avg: {
+            amount: true,
+          },
+        }).catch(() => ({ _sum: { amount: 0 }, _avg: { amount: 0 } })),
+
+        // Status breakdown
+        this.prismaService.payment.groupBy({
+          by: ['status'],
+          where,
+          _count: {
+            status: true,
+          },
+          _sum: {
+            amount: true,
+          },
+        }).catch(() => []),
+
+        // Payment method breakdown - filter out null values
+        this.prismaService.payment.groupBy({
+          by: ['paymentMethod'],
+          where: {
+            ...where,
+            paymentMethod: { not: null },
+          },
+          _count: {
+            paymentMethod: true,
+          },
+          _sum: {
+            amount: true,
+          },
+        }).catch(() => []),
+
+        // Recent payments (last 10)
+        this.prismaService.payment.findMany({
+          where,
+          orderBy: {
+            createdAt: 'desc',
+          },
+          take: 10,
+          include: {
+            sender: {
+              select: {
+                firstName: true,
+                lastName: true,
+                phone: true,
+              },
+            },
+            paymentType: {
+              select: {
+                name: true,
+              },
+            },
+          },
+        }).catch(() => []),
+      ]);
+
+      return {
+        summary: {
+          totalPayments: totalPayments || 0,
+          totalAmount: totalAmount?._sum?.amount || 0,
+          averageAmount: totalAmount?._avg?.amount || 0,
+        },
+        statusBreakdown: (statusBreakdown || []).map((item) => ({
+          status: item.status,
+          count: item._count?.status || 0,
+          totalAmount: item._sum?.amount || 0,
+        })),
+        methodBreakdown: (methodBreakdown || []).map((item) => ({
+          method: item.paymentMethod,
+          count: item._count?.paymentMethod || 0,
+          totalAmount: item._sum?.amount || 0,
+        })),
+        recentPayments: (recentPayments || []).map((payment) => ({
+          id: payment.id,
+          amount: payment.amount,
+          status: payment.status,
+          paymentType: payment.paymentType?.name || 'Unknown',
+          sender: `${payment.sender?.firstName || ''} ${payment.sender?.lastName || ''}`.trim() || 'Unknown',
+          senderPhone: payment.sender?.phone || '',
+          createdAt: payment.createdAt,
+        })),
+      };
+    } catch (error) {
+      this.logger.error('Error getting organization payment stats:', error);
+      // Return empty stats on error
+      return {
+        summary: {
+          totalPayments: 0,
+          totalAmount: 0,
+          averageAmount: 0,
+        },
+        statusBreakdown: [],
+        methodBreakdown: [],
+        recentPayments: [],
+      };
+    }
   }
 
   async handleWebhook(webhookDto: PaymentWebhookDto): Promise<void> {

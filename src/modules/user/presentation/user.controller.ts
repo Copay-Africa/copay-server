@@ -7,6 +7,7 @@ import {
   Query,
   UseGuards,
   Patch,
+  Delete,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -21,6 +22,9 @@ import {
   CurrentUserResponseDto,
   CooperativeDetailsDto,
 } from './dto/current-user-response.dto';
+import { UpdateTenantDto } from './dto/update-tenant.dto';
+import { TenantFilterDto } from './dto/tenant-filter.dto';
+import { TenantDetailResponseDto } from './dto/tenant-detail-response.dto';
 import { PaginationDto } from '../../../shared/dto/pagination.dto';
 import { PaginatedResponseDto } from '../../../shared/dto/paginated-response.dto';
 import { JwtAuthGuard } from '../../../shared/guards/jwt-auth.guard';
@@ -135,5 +139,85 @@ export class UserController {
     @Body('status') status: UserStatus,
   ): Promise<UserResponseDto> {
     return this.userService.updateStatus(id, status);
+  }
+
+  // Super Admin Tenant Management Endpoints
+  @Get('tenants')
+  @Roles('SUPER_ADMIN')
+  @ApiOperation({ summary: 'Get all tenants (Super Admin only)' })
+  @ApiResponse({
+    status: 200,
+    description: 'Tenants retrieved successfully',
+    type: PaginatedResponseDto<TenantDetailResponseDto>,
+  })
+  async getAllTenants(
+    @Query() filterDto: TenantFilterDto,
+  ): Promise<PaginatedResponseDto<TenantDetailResponseDto>> {
+    return this.userService.getAllTenants(filterDto);
+  }
+
+  @Get('tenants/stats')
+  @Roles('SUPER_ADMIN')
+  @ApiOperation({ summary: 'Get tenant statistics (Super Admin only)' })
+  @ApiResponse({
+    status: 200,
+    description: 'Tenant statistics retrieved successfully',
+  })
+  async getTenantStats(): Promise<{
+    total: number;
+    active: number;
+    inactive: number;
+    byCooperative: Array<{
+      cooperativeId: string;
+      cooperativeName: string;
+      count: number;
+    }>;
+    recentRegistrations: number;
+  }> {
+    return this.userService.getTenantStats();
+  }
+
+  @Get('tenants/:id')
+  @Roles('SUPER_ADMIN')
+  @ApiOperation({ summary: 'Get tenant by ID (Super Admin only)' })
+  @ApiResponse({
+    status: 200,
+    description: 'Tenant retrieved successfully',
+    type: TenantDetailResponseDto,
+  })
+  async getTenantById(
+    @Param('id') id: string,
+  ): Promise<TenantDetailResponseDto> {
+    return this.userService.getTenantById(id);
+  }
+
+  @Patch('tenants/:id')
+  @Roles('SUPER_ADMIN')
+  @ApiOperation({ summary: 'Update tenant (Super Admin only)' })
+  @ApiResponse({
+    status: 200,
+    description: 'Tenant updated successfully',
+    type: TenantDetailResponseDto,
+  })
+  async updateTenant(
+    @Param('id') id: string,
+    @Body() updateTenantDto: UpdateTenantDto,
+  ): Promise<TenantDetailResponseDto> {
+    return this.userService.updateTenant(id, updateTenantDto);
+  }
+
+  @Delete('tenants/:id')
+  @Roles('SUPER_ADMIN')
+  @ApiOperation({
+    summary: 'Delete tenant (Super Admin only)',
+    description: 'Soft delete if tenant has payments, hard delete otherwise',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Tenant deleted successfully',
+  })
+  async deleteTenant(@Param('id') id: string): Promise<{ message: string }> {
+    await this.userService.deleteTenant(id);
+    return { message: 'Tenant deleted successfully' };
   }
 }

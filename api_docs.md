@@ -1468,4 +1468,85 @@ Use these test credentials:
 
 ---
 
+## Super Admin Tenant Management APIs
+
+### Get All Tenants (Super Admin Only)
+- **GET** `/api/v1/users/tenants`
+- **Auth**: Required (SUPER_ADMIN role)
+- **Query Parameters**:
+  - `page` (optional): Page number
+  - `limit` (optional): Items per page
+  - `search` (optional): Search in phone/name/email
+  - `status` (optional): Filter by user status
+  - `cooperativeId` (optional): Filter by cooperative
+  - `dateFrom` (optional): Registration date range start
+  - `dateTo` (optional): Registration date range end
+  - `sortBy` (optional): Sort field
+  - `sortOrder` (optional): asc/desc
+- **Description**: Get paginated list of all tenants across all cooperatives with detailed information
+
+### Get Tenant Statistics (Super Admin Only)
+- **GET** `/api/v1/users/tenants/stats`
+- **Auth**: Required (SUPER_ADMIN role)
+- **Response**:
+```json
+{
+  "total": 1250,
+  "active": 1180,
+  "inactive": 70,
+  "byCooperative": [
+    {
+      "cooperativeId": "coop-1",
+      "cooperativeName": "Kigali Housing Cooperative",
+      "count": 450
+    }
+  ],
+  "recentRegistrations": 25
+}
+```
+
+### Get Tenant Details (Super Admin Only)
+- **GET** `/api/v1/users/tenants/:id`
+- **Auth**: Required (SUPER_ADMIN role)
+- **Description**: Get detailed tenant information including payment stats and complaint history
+- **Response**: Enhanced tenant details with:
+  - Basic user information
+  - Cooperative details
+  - Payment statistics (total payments, amount, last payment)
+  - Active complaints count
+
+### Update Tenant (Super Admin Only)
+- **PATCH** `/api/v1/users/tenants/:id`
+- **Auth**: Required (SUPER_ADMIN role)
+- **Request Body**:
+```json
+{
+  "firstName": "John",
+  "lastName": "Doe",
+  "email": "john.doe@example.com",
+  "status": "ACTIVE",
+  "cooperativeId": "new-cooperative-id",
+  "pin": "1234"
+}
+```
+- **Description**: Update tenant information, move between cooperatives, reset PIN, or change status
+
+### Delete Tenant (Super Admin Only)
+- **DELETE** `/api/v1/users/tenants/:id`
+- **Auth**: Required (SUPER_ADMIN role)
+- **Description**: 
+  - Soft delete (set status to INACTIVE) if tenant has payment history
+  - Hard delete if tenant has no payments
+- **Response**: Confirmation message
+
+### Tenant Management Features
+- **Cross-Cooperative Access**: Super admins can manage tenants across all cooperatives
+- **Enhanced Details**: Includes payment statistics and complaint counts
+- **Flexible Filtering**: Filter by status, cooperative, registration date
+- **Cooperative Migration**: Move tenants between cooperatives
+- **PIN Reset**: Reset tenant PINs for account recovery
+- **Smart Deletion**: Preserves data integrity for tenants with payment history
+
+---
+
 *This documentation is maintained and updated with each API release. For the latest version, visit <https://docs.copay.rw/api>*

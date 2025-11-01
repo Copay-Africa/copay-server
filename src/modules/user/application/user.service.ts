@@ -11,6 +11,9 @@ import {
   CurrentUserResponseDto,
   CooperativeDetailsDto,
 } from '../presentation/dto/current-user-response.dto';
+import { UpdateTenantDto } from '../presentation/dto/update-tenant.dto';
+import { TenantFilterDto } from '../presentation/dto/tenant-filter.dto';
+import { TenantDetailResponseDto } from '../presentation/dto/tenant-detail-response.dto';
 import { PaginationDto } from '../../../shared/dto/pagination.dto';
 import { PaginatedResponseDto } from '../../../shared/dto/paginated-response.dto';
 import { UserRole, UserStatus } from '@prisma/client';
@@ -222,6 +225,352 @@ export class UserService {
       code: coop.code,
       status: coop.status as any,
     }));
+  }
+
+  // Super Admin Tenant Management Methods
+  async getAllTenants(
+    filterDto: TenantFilterDto,
+  ): Promise<PaginatedResponseDto<TenantDetailResponseDto>> {
+    const {
+      page,
+      limit,
+      search,
+      sortBy,
+      sortOrder,
+      skip,
+      status,
+      cooperativeId,
+      role,
+      dateFrom,
+      dateTo,
+    } = filterDto;
+
+    // Build where clause
+    const where: any = {
+      role: role || UserRole.TENANT, // Default to tenants only
+    };
+
+    // Add filters
+    if (status) {
+      where.status = status;
+    }
+
+    if (cooperativeId) {
+      where.cooperativeId = cooperativeId;
+    }
+
+    if (search) {
+      where.OR = [
+        { phone: { contains: search, mode: 'insensitive' } },
+        { firstName: { contains: search, mode: 'insensitive' } },
+        { lastName: { contains: search, mode: 'insensitive' } },
+        { email: { contains: search, mode: 'insensitive' } },
+      ];
+    }
+
+    // Date range filter
+    if (dateFrom || dateTo) {
+      where.createdAt = {};
+      if (dateFrom) {
+        where.createdAt.gte = new Date(dateFrom);
+      }
+      if (dateTo) {
+        where.createdAt.lte = new Date(dateTo);
+      }
+    }
+
+    // Build order by clause
+    const orderBy: any = {};
+    if (sortBy) {
+      orderBy[sortBy] = sortOrder;
+    } else {
+      orderBy.createdAt = 'desc';
+    }
+
+    // Execute queries
+    const [tenants, total] = await Promise.all([
+      this.prismaService.user.findMany({
+        where,
+        orderBy,
+        skip,
+        take: limit,
+        include: {
+          cooperative: {
+            select: {
+              id: true,
+              name: true,
+              code: true,
+              status: true,
+            },
+          },
+        },
+      }),
+      this.prismaService.user.count({ where }),
+    ]);
+
+    const tenantResponses = await Promise.all(
+      tenants.map(async (tenant) => await this.mapToTenantDetailDto(tenant)),
+    );
+
+    return new PaginatedResponseDto(
+      tenantResponses,
+      total,
+      page || 1,
+      limit || 10,
+    );
+  }
+
+  async getTenantById(id: string): Promise<TenantDetailResponseDto> {
+    const tenant = await this.prismaService.user.findUnique({
+      where: { id },
+      include: {
+        cooperative: {
+          select: {
+            id: true,
+            name: true,
+            code: true,
+            status: true,
+          },
+        },
+      },
+    });
+
+    if (!tenant) {
+      throw new NotFoundException('Tenant not found');
+    }
+
+    return await this.mapToTenantDetailDto(tenant);
+  }
+
+  async updateTenant(
+    id: string,
+    updateTenantDto: UpdateTenantDto,
+  ): Promise<TenantDetailResponseDto> {
+    const tenant = await this.prismaService.user.findUnique({
+      where: { id },
+    });
+
+    if (!tenant) {
+      throw new NotFoundException('Tenant not found');
+    }
+
+    // Validate cooperative if provided
+    if (updateTenantDto.cooperativeId) {
+      const cooperative = await this.prismaService.cooperative.findUnique({
+        where: { id: updateTenantDto.cooperativeId },
+      });
+
+      if (!cooperative) {
+        throw new NotFoundException('Cooperative not found');
+      }
+    }
+
+    // Prepare update data
+    const updateData: any = {
+      firstName: updateTenantDto.firstName,
+      lastName: updateTenantDto.lastName,
+      email: updateTenantDto.email,
+      status: updateTenantDto.status,
+      cooperativeId: updateTenantDto.cooperativeId,
+    };
+
+    // Hash new PIN if provided
+    if (updateTenantDto.pin) {
+      updateData.pin = await bcrypt.hash(updateTenantDto.pin, 12);
+    }
+
+    // Remove undefined values
+    Object.keys(updateData).forEach((key) => {
+      if (updateData[key] === undefined) {
+        delete updateData[key];
+      }
+    });
+
+    const updatedTenant = await this.prismaService.user.update({
+      where: { id },
+      data: updateData,
+      include: {
+        cooperative: {
+          select: {
+            id: true,
+            name: true,
+            code: true,
+            status: true,
+          },
+        },
+      },
+    });
+
+    return await this.mapToTenantDetailDto(updatedTenant);
+  }
+
+  async deleteTenant(id: string): Promise<void> {
+    const tenant = await this.prismaService.user.findUnique({
+      where: { id },
+    });
+
+    if (!tenant) {
+      throw new NotFoundException('Tenant not found');
+    }
+
+    // Check if tenant has payments (soft delete recommended)
+    const paymentCount = await this.prismaService.payment.count({
+      where: { senderId: id },
+    });
+
+    if (paymentCount > 0) {
+      // Soft delete by setting status to INACTIVE
+      await this.prismaService.user.update({
+        where: { id },
+        data: { status: UserStatus.INACTIVE },
+      });
+    } else {
+      // Hard delete if no payments
+      await this.prismaService.user.delete({
+        where: { id },
+      });
+    }
+  }
+
+  async getTenantStats(): Promise<{
+    total: number;
+    active: number;
+    inactive: number;
+    byCooperative: Array<{
+      cooperativeId: string;
+      cooperativeName: string;
+      count: number;
+    }>;
+    recentRegistrations: number;
+  }> {
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+    try {
+      const [total, active, inactive, byCooperative, recentRegistrations] =
+        await Promise.all([
+          // Total tenants
+          this.prismaService.user.count({
+            where: { role: UserRole.TENANT },
+          }),
+          // Active tenants
+          this.prismaService.user.count({
+            where: {
+              role: UserRole.TENANT,
+              status: UserStatus.ACTIVE,
+            },
+          }),
+          // Inactive tenants
+          this.prismaService.user.count({
+            where: {
+              role: UserRole.TENANT,
+              status: UserStatus.INACTIVE,
+            },
+          }),
+          // By cooperative
+          this.prismaService.user.groupBy({
+            by: ['cooperativeId'],
+            where: { role: UserRole.TENANT },
+            _count: true,
+          }),
+          // Recent registrations (last 30 days)
+          this.prismaService.user.count({
+            where: {
+              role: UserRole.TENANT,
+              createdAt: {
+                gte: thirtyDaysAgo,
+              },
+            },
+          }),
+        ]);
+
+      // Enrich cooperative data
+      const cooperativeIds = byCooperative
+        .filter((item) => item.cooperativeId)
+        .map((item) => item.cooperativeId!);
+
+      const cooperatives = await this.prismaService.cooperative.findMany({
+        where: { id: { in: cooperativeIds } },
+        select: { id: true, name: true },
+      });
+
+      const cooperativeMap = new Map(cooperatives.map((c) => [c.id, c.name]));
+
+      const enrichedByCooperative = byCooperative
+        .filter((item) => item.cooperativeId)
+        .map((item) => ({
+          cooperativeId: item.cooperativeId!,
+          cooperativeName: cooperativeMap.get(item.cooperativeId!) || 'Unknown',
+          count: item._count,
+        }));
+
+      return {
+        total,
+        active,
+        inactive,
+        byCooperative: enrichedByCooperative,
+        recentRegistrations,
+      };
+    } catch (error) {
+      console.error('Error getting tenant stats:', error);
+      return {
+        total: 0,
+        active: 0,
+        inactive: 0,
+        byCooperative: [],
+        recentRegistrations: 0,
+      };
+    }
+  }
+
+  private async mapToTenantDetailDto(
+    tenant: any,
+  ): Promise<TenantDetailResponseDto> {
+    // Get additional tenant stats
+    const [paymentStats, complaintStats] = await Promise.all([
+      // Payment statistics
+      this.prismaService.payment.aggregate({
+        where: { senderId: tenant.id },
+        _count: true,
+        _sum: { amount: true },
+        _max: { createdAt: true },
+      }),
+      // Active complaints count
+      this.prismaService.complaint.count({
+        where: {
+          userId: tenant.id,
+          status: { in: ['OPEN', 'IN_PROGRESS'] },
+        },
+      }),
+    ]);
+
+    return {
+      id: tenant.id,
+      phone: tenant.phone,
+      firstName: tenant.firstName,
+      lastName: tenant.lastName,
+      email: tenant.email,
+      role: tenant.role,
+      status: tenant.status,
+      cooperativeId: tenant.cooperativeId,
+      cooperative: tenant.cooperative
+        ? {
+            id: tenant.cooperative.id,
+            name: tenant.cooperative.name,
+            code: tenant.cooperative.code,
+            status: tenant.cooperative.status,
+          }
+        : undefined,
+      lastLoginAt: tenant.lastLoginAt,
+      createdAt: tenant.createdAt,
+      updatedAt: tenant.updatedAt,
+      totalPayments: paymentStats._count || 0,
+      totalPaymentAmount: paymentStats._sum.amount
+        ? Number(paymentStats._sum.amount)
+        : 0,
+      lastPaymentAt: paymentStats._max.createdAt || undefined,
+      activeComplaints: complaintStats || 0,
+    };
   }
 
   private mapToResponseDto(user: any): UserResponseDto {
