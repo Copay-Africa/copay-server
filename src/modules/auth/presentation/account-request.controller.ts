@@ -75,7 +75,8 @@ export class AccountRequestController {
   @Roles('SUPER_ADMIN', 'ORGANIZATION_ADMIN')
   @ApiOperation({
     summary: 'Get all account requests',
-    description: 'Get all account requests with role-based filtering (Admin only)',
+    description:
+      'Get all account requests with role-based filtering (Admin only)',
   })
   @ApiQuery({
     name: 'status',
@@ -121,9 +122,11 @@ export class AccountRequestController {
     );
   }
 
-    @Get('organization/account-requests')
+  @Get('organization/account-requests')
   @Roles('ORGANIZATION_ADMIN')
-  @ApiOperation({ summary: 'Get organization account requests (organization admin only)' })
+  @ApiOperation({
+    summary: 'Get organization account requests (organization admin only)',
+  })
   @ApiQuery({ name: 'status', required: false, enum: AccountRequestStatus })
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'limit', required: false, type: Number })
@@ -138,9 +141,11 @@ export class AccountRequestController {
     @Query('limit') limit?: number,
   ) {
     if (!user.cooperativeId) {
-      throw new BadRequestException('Organization admin must be associated with a cooperative');
+      throw new BadRequestException(
+        'Organization admin must be associated with a cooperative',
+      );
     }
-    
+
     return this.accountRequestService.getOrganizationAccountRequests(
       user.cooperativeId,
       status,
@@ -188,9 +193,9 @@ export class AccountRequestController {
     @Query('cooperativeId') cooperativeId?: string,
   ) {
     return this.accountRequestService.getAccountRequestStats(
+      cooperativeId,
       user.role,
       user.cooperativeId,
-      cooperativeId,
     );
   }
 
