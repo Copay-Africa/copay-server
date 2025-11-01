@@ -160,13 +160,15 @@ export class AccountRequestService {
   }
 
   /**
-   * Get all account requests with filters
+   * Get all account requests with filters and role-based access
    */
   async getAccountRequests(
     status?: AccountRequestStatus,
     cooperativeId?: string,
     page = 1,
     limit = 10,
+    userRole?: string,
+    userCooperativeId?: string,
   ): Promise<{
     data: AccountRequestResponseDto[];
     total: number;
@@ -176,12 +178,24 @@ export class AccountRequestService {
   }> {
     const where: any = {};
 
-    if (status) {
-      where.status = status;
+    // Apply role-based filtering
+    if (userRole === 'ORGANIZATION_ADMIN' && userCooperativeId) {
+      // Organization admins can only see requests for their cooperative
+      where.cooperativeId = userCooperativeId;
+    } else if (userRole === 'SUPER_ADMIN') {
+      // Super admins can see all requests, optionally filtered by cooperative
+      if (cooperativeId) {
+        where.cooperativeId = cooperativeId;
+      }
+    } else {
+      // Default: filter by cooperative if provided
+      if (cooperativeId) {
+        where.cooperativeId = cooperativeId;
+      }
     }
 
-    if (cooperativeId) {
-      where.cooperativeId = cooperativeId;
+    if (status) {
+      where.status = status;
     }
 
     const [requests, total] = await Promise.all([
@@ -430,14 +444,29 @@ export class AccountRequestService {
   }
 
   /**
-   * Get account request statistics
+   * Get account request statistics with role-based access
    */
   async getAccountRequestStats(
     cooperativeId?: string,
+    userRole?: string,
+    userCooperativeId?: string,
   ): Promise<AccountRequestStatsDto> {
     const where: any = {};
-    if (cooperativeId) {
-      where.cooperativeId = cooperativeId;
+
+    // Apply role-based filtering for statistics
+    if (userRole === 'ORGANIZATION_ADMIN' && userCooperativeId) {
+      // Organization admins can only see stats for their cooperative
+      where.cooperativeId = userCooperativeId;
+    } else if (userRole === 'SUPER_ADMIN') {
+      // Super admins can see all stats, optionally filtered by cooperative
+      if (cooperativeId) {
+        where.cooperativeId = cooperativeId;
+      }
+    } else {
+      // Default: filter by cooperative if provided
+      if (cooperativeId) {
+        where.cooperativeId = cooperativeId;
+      }
     }
 
     const [total, pending, approved, rejected] = await Promise.all([
@@ -458,6 +487,82 @@ export class AccountRequestService {
       pending,
       approved,
       rejected,
+    };
+  }
+
+  /**
+   * Get organization account requests (for organization admins)
+   */
+  async getOrganizationAccountRequests(
+    cooperativeId: string,
+    status?: AccountRequestStatus,
+    page = 1,
+    limit = 10,
+  ): Promise<{
+    data: AccountRequestResponseDto[];
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+    organizationInfo?: {
+      id: string;
+      name: string;
+      code: string;
+    };
+  }> {
+    const where: any = {
+      cooperativeId,
+    };
+
+    if (status) {
+      where.status = status;
+    }
+
+    const [requests, total, cooperative] = await Promise.all([
+      this.prismaService.accountRequest.findMany({
+        where,
+        include: {
+          cooperative: {
+            select: {
+              id: true,
+              name: true,
+              code: true,
+            },
+          },
+          processedUser: {
+            select: {
+              id: true,
+              firstName: true,
+              lastName: true,
+            },
+          },
+        },
+        orderBy: {
+          createdAt: 'desc',
+        },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      this.prismaService.accountRequest.count({ where }),
+      this.prismaService.cooperative.findUnique({
+        where: { id: cooperativeId },
+        select: {
+          id: true,
+          name: true,
+          code: true,
+        },
+      }),
+    ]);
+
+    const data = requests.map((request) => this.mapToResponseDto(request));
+
+    return {
+      data,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+      organizationInfo: cooperative || undefined,
     };
   }
 

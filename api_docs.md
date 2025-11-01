@@ -792,6 +792,7 @@ The Complaints API provides comprehensive complaint management for both tenants 
 ```
 
 **Priority Levels:**
+
 - `LOW`, `MEDIUM`, `HIGH`, `URGENT`
 
 **Response:**
@@ -834,6 +835,7 @@ The Complaints API provides comprehensive complaint management for both tenants 
 **GET** `/complaints`
 
 **Access Control:**
+
 - **TENANT**: See only their own complaints
 - **ORGANIZATION_ADMIN**: See all complaints within their cooperative
 - **SUPER_ADMIN**: See all complaints across all cooperatives
@@ -939,6 +941,7 @@ curl -X GET "https://api.copay.com/complaints/organization/stats?fromDate=2025-1
 **GET** `/complaints/:id`
 
 **Access Control:**
+
 - **TENANT**: Can only view their own complaints
 - **ORGANIZATION_ADMIN**: Can view complaints within their cooperative
 - **SUPER_ADMIN**: Can view any complaint
@@ -959,6 +962,7 @@ curl -X GET "https://api.copay.com/complaints/organization/stats?fromDate=2025-1
 ```
 
 **Status Values:**
+
 - `OPEN` - Newly submitted complaint
 - `IN_PROGRESS` - Being worked on by maintenance/admin
 - `RESOLVED` - Issue has been fixed
@@ -1471,9 +1475,11 @@ Use these test credentials:
 ## Super Admin Tenant Management APIs
 
 ### Create Tenant (Super Admin Only)
+
 - **POST** `/api/v1/users/tenants`
 - **Auth**: Required (SUPER_ADMIN role)
 - **Request Body**:
+
 ```json
 {
   "phone": "+250788123456",
@@ -1485,10 +1491,12 @@ Use these test credentials:
   "notes": "Apartment 301, Building A"
 }
 ```
+
 - **Description**: Create a new tenant and assign them to a specific cooperative
 - **Response**: Enhanced tenant details with statistics
 
 ### Get All Tenants (Super Admin Only)
+
 - **GET** `/api/v1/users/tenants`
 - **Auth**: Required (SUPER_ADMIN role)
 - **Query Parameters**:
@@ -1504,9 +1512,11 @@ Use these test credentials:
 - **Description**: Get paginated list of all tenants across all cooperatives with detailed information
 
 ### Get Tenant Statistics (Super Admin Only)
+
 - **GET** `/api/v1/users/tenants/stats`
 - **Auth**: Required (SUPER_ADMIN role)
 - **Response**:
+
 ```json
 {
   "total": 1250,
@@ -1524,6 +1534,7 @@ Use these test credentials:
 ```
 
 ### Get Tenant Details (Super Admin Only)
+
 - **GET** `/api/v1/users/tenants/:id`
 - **Auth**: Required (SUPER_ADMIN role)
 - **Description**: Get detailed tenant information including payment stats and complaint history
@@ -1534,9 +1545,11 @@ Use these test credentials:
   - Active complaints count
 
 ### Update Tenant (Super Admin Only)
+
 - **PATCH** `/api/v1/users/tenants/:id`
 - **Auth**: Required (SUPER_ADMIN role)
 - **Request Body**:
+
 ```json
 {
   "firstName": "John",
@@ -1547,17 +1560,20 @@ Use these test credentials:
   "pin": "1234"
 }
 ```
+
 - **Description**: Update tenant information, move between cooperatives, reset PIN, or change status
 
 ### Delete Tenant (Super Admin Only)
+
 - **DELETE** `/api/v1/users/tenants/:id`
 - **Auth**: Required (SUPER_ADMIN role)
-- **Description**: 
+- **Description**:
   - Soft delete (set status to INACTIVE) if tenant has payment history
   - Hard delete if tenant has no payments
 - **Response**: Confirmation message
 
 ### Tenant Management Features
+
 - **Tenant Creation**: Create new tenants and assign them to any cooperative
 - **Cross-Cooperative Access**: Super admins can manage tenants across all cooperatives
 - **Enhanced Details**: Includes payment statistics and complaint counts
@@ -1565,6 +1581,133 @@ Use these test credentials:
 - **Cooperative Migration**: Move tenants between cooperatives
 - **PIN Reset**: Reset tenant PINs for account recovery
 - **Smart Deletion**: Preserves data integrity for tenants with payment history
+
+---
+
+## Account Request Management APIs
+
+### Create Account Request (Public)
+
+- **POST** `/account-requests/:cooperativeId`
+- **Auth**: None (Public endpoint)
+- **Request Body**:
+
+```json
+{
+  "fullName": "John Doe",
+  "phone": "+250788123456",
+  "roomNumber": "301"
+}
+```
+
+- **Description**: Allow potential tenants to submit account requests to join a cooperative
+
+### Get Account Requests (Role-based)
+
+- **GET** `/account-requests`
+- **Auth**: Required (SUPER_ADMIN, ORGANIZATION_ADMIN roles)
+- **Query Parameters**:
+  - `status` (optional): Filter by request status (PENDING, APPROVED, REJECTED)
+  - `cooperativeId` (optional): Filter by cooperative (super admin only)
+  - `page`, `limit` (optional): Pagination
+- **Access Control**:
+  - **Super Admin**: Can view all requests across all cooperatives
+  - **Organization Admin**: Can only view requests for their cooperative
+- **Description**: List account requests with role-based filtering
+
+### Get Organization Account Requests (Organization Admin)
+
+- **GET** `/organization/account-requests`
+- **Auth**: Required (ORGANIZATION_ADMIN role)
+- **Query Parameters**:
+  - `status` (optional): Filter by request status
+  - `page`, `limit` (optional): Pagination
+- **Response**: Includes organization information along with requests
+- **Description**: Dedicated endpoint for organization admins to view their cooperative's requests
+
+### Get All Account Requests (Super Admin)
+
+- **GET** `/admin/account-requests`
+- **Auth**: Required (SUPER_ADMIN role)
+- **Query Parameters**:
+  - `cooperativeId` (optional): Filter by specific cooperative
+  - `status` (optional): Filter by request status
+  - `page`, `limit` (optional): Pagination
+- **Description**: Super admin endpoint to view all account requests across all cooperatives
+
+### Get Account Request Details
+
+- **GET** `/account-requests/:id`
+- **Auth**: Required (SUPER_ADMIN, ORGANIZATION_ADMIN roles)
+- **Access Control**: Organization admins can only view requests from their cooperative
+- **Description**: Get detailed information about a specific account request
+
+### Process Account Request
+
+- **PUT** `/account-requests/:id/process`
+- **Auth**: Required (SUPER_ADMIN, ORGANIZATION_ADMIN roles)
+- **Request Body**:
+
+```json
+{
+  "action": "APPROVE",
+  "notes": "Welcome to our cooperative",
+  "rejectionReason": null
+}
+```
+
+- **Actions**: APPROVE or REJECT
+- **Description**: Approve or reject account requests. When approved, creates a new tenant user
+
+### Delete Account Request
+
+- **DELETE** `/account-requests/:id`
+- **Auth**: Required (SUPER_ADMIN, ORGANIZATION_ADMIN roles)
+- **Access Control**: Organization admins can only delete requests from their cooperative
+- **Description**: Delete account request (admin only)
+
+### Get Account Request Statistics
+
+- **GET** `/account-requests/stats`
+- **Auth**: Required (SUPER_ADMIN, ORGANIZATION_ADMIN roles)
+- **Query Parameters**:
+  - `cooperativeId` (optional): Filter statistics by cooperative (super admin only)
+- **Response**:
+
+```json
+{
+  "total": 45,
+  "byStatus": [
+    {"status": "PENDING", "count": 15},
+    {"status": "APPROVED", "count": 25},
+    {"status": "REJECTED", "count": 5}
+  ],
+  "recentRequests": [...]
+}
+```
+
+- **Access Control**: Organization admins see only their cooperative's stats
+
+### Check Availability
+
+- **GET** `/account-requests/:cooperativeId/availability`
+- **Auth**: None (Public endpoint)
+- **Query Parameters**:
+  - `phone` (optional): Check phone number availability
+  - `roomNumber` (optional): Check room number availability
+- **Description**: Check if phone number or room number is already in use (public endpoint)
+
+### Account Request Management Features
+
+- **Role-based Access Control**:
+  - Super admins can manage requests across all cooperatives
+  - Organization admins can only manage requests for their cooperative
+- **Cooperative Isolation**: Each cooperative manages only their own account requests
+- **Public Request Submission**: Anyone can submit account requests without authentication
+- **Automated User Creation**: Approved requests automatically create tenant user accounts
+- **Status Tracking**: Complete request lifecycle from submission to approval/rejection
+- **Statistics Dashboard**: Role-based statistics for monitoring request volumes
+- **Availability Checking**: Public endpoint to check phone/room availability before submission
 
 ---
 

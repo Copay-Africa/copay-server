@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Controller,
   Post,
   Get,
@@ -11,6 +12,7 @@ import {
   HttpStatus,
   ParseIntPipe,
   DefaultValuePipe,
+  UseGuards,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -27,12 +29,17 @@ import {
   ProcessAccountRequestDto,
   AccountRequestStatsDto,
 } from './dto/account-request.dto';
-import { Public } from '../../../shared/decorators/auth.decorator';
+import { Public, Roles } from '../../../shared/decorators/auth.decorator';
 import { CurrentUser } from '../../../shared/decorators/current-user.decorator';
-import { AccountRequestStatus } from '@prisma/client';
+import { AuthenticatedUser } from '../../../shared/decorators/current-user.decorator';
+import { JwtAuthGuard } from '../../../shared/guards/jwt-auth.guard';
+import { RolesGuard } from '../../../shared/guards/roles.guard';
+import { AccountRequestStatus, UserRole } from '@prisma/client';
 
 @ApiTags('Account Requests')
 @Controller('account-requests')
+@UseGuards(JwtAuthGuard, RolesGuard)
+@ApiBearerAuth()
 export class AccountRequestController {
   constructor(private accountRequestService: AccountRequestService) {}
 
@@ -65,10 +72,10 @@ export class AccountRequestController {
   }
 
   @Get()
-  @ApiBearerAuth()
+  @Roles('SUPER_ADMIN', 'ORGANIZATION_ADMIN')
   @ApiOperation({
     summary: 'Get all account requests',
-    description: 'Get all account requests with optional filters (Admin only)',
+    description: 'Get all account requests with role-based filtering (Admin only)',
   })
   @ApiQuery({
     name: 'status',
@@ -79,7 +86,7 @@ export class AccountRequestController {
   @ApiQuery({
     name: 'cooperativeId',
     required: false,
-    description: 'Filter by cooperative ID',
+    description: 'Filter by cooperative ID (Super admin only)',
   })
   @ApiQuery({
     name: 'page',
@@ -98,6 +105,7 @@ export class AccountRequestController {
     description: 'Account requests retrieved successfully',
   })
   async getAccountRequests(
+    @CurrentUser() currentUser: AuthenticatedUser,
     @Query('status') status?: AccountRequestStatus,
     @Query('cooperativeId') cooperativeId?: string,
     @Query('page', new DefaultValuePipe(1), ParseIntPipe) page = 1,
@@ -108,33 +116,86 @@ export class AccountRequestController {
       cooperativeId,
       page,
       limit,
+      currentUser.role,
+      currentUser.cooperativeId,
     );
   }
 
-  @Get('stats')
-  @ApiBearerAuth()
-  @ApiOperation({
-    summary: 'Get account request statistics',
-    description: 'Get statistics for account requests (Admin only)',
-  })
-  @ApiQuery({
-    name: 'cooperativeId',
-    required: false,
-    description: 'Filter by cooperative ID',
-  })
+    @Get('organization/account-requests')
+  @Roles('ORGANIZATION_ADMIN')
+  @ApiOperation({ summary: 'Get organization account requests (organization admin only)' })
+  @ApiQuery({ name: 'status', required: false, enum: AccountRequestStatus })
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
   @ApiResponse({
     status: 200,
-    description: 'Statistics retrieved successfully',
-    type: AccountRequestStatsDto,
+    description: 'Organization account requests retrieved successfully',
+  })
+  async getOrganizationAccountRequests(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query('status') status?: AccountRequestStatus,
+    @Query('page') page?: number,
+    @Query('limit') limit?: number,
+  ) {
+    if (!user.cooperativeId) {
+      throw new BadRequestException('Organization admin must be associated with a cooperative');
+    }
+    
+    return this.accountRequestService.getOrganizationAccountRequests(
+      user.cooperativeId,
+      status,
+      page ? parseInt(page.toString()) : 1,
+      limit ? parseInt(limit.toString()) : 10,
+    );
+  }
+
+  @Get('admin/account-requests')
+  @Roles('SUPER_ADMIN')
+  @ApiOperation({ summary: 'Get all account requests (super admin only)' })
+  @ApiQuery({ name: 'cooperativeId', required: false, type: String })
+  @ApiQuery({ name: 'status', required: false, enum: AccountRequestStatus })
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  @ApiResponse({
+    status: 200,
+    description: 'All account requests retrieved successfully',
+  })
+  async getAdminAccountRequests(
+    @Query('cooperativeId') cooperativeId?: string,
+    @Query('status') status?: AccountRequestStatus,
+    @Query('page') page?: number,
+    @Query('limit') limit?: number,
+  ) {
+    return this.accountRequestService.getAccountRequests(
+      status,
+      cooperativeId,
+      page ? parseInt(page.toString()) : 1,
+      limit ? parseInt(limit.toString()) : 10,
+      'SUPER_ADMIN',
+      undefined,
+    );
+  }
+
+  @Get('account-requests/stats')
+  @Roles('SUPER_ADMIN', 'ORGANIZATION_ADMIN')
+  @ApiOperation({ summary: 'Get account requests statistics' })
+  @ApiResponse({
+    status: 200,
+    description: 'Account requests statistics retrieved successfully',
   })
   async getAccountRequestStats(
+    @CurrentUser() user: AuthenticatedUser,
     @Query('cooperativeId') cooperativeId?: string,
-  ): Promise<AccountRequestStatsDto> {
-    return this.accountRequestService.getAccountRequestStats(cooperativeId);
+  ) {
+    return this.accountRequestService.getAccountRequestStats(
+      user.role,
+      user.cooperativeId,
+      cooperativeId,
+    );
   }
 
   @Get(':id')
-  @ApiBearerAuth()
+  @Roles('SUPER_ADMIN', 'ORGANIZATION_ADMIN')
   @ApiOperation({
     summary: 'Get account request by ID',
     description: 'Get a specific account request by ID (Admin only)',
@@ -159,7 +220,7 @@ export class AccountRequestController {
   }
 
   @Put(':id/process')
-  @ApiBearerAuth()
+  @Roles('SUPER_ADMIN', 'ORGANIZATION_ADMIN')
   @ApiOperation({
     summary: 'Process account request',
     description: 'Approve or reject an account request (Admin only)',
@@ -184,17 +245,17 @@ export class AccountRequestController {
   async processAccountRequest(
     @Param('id') id: string,
     @Body() processDto: ProcessAccountRequestDto,
-    @CurrentUser() user: any,
+    @CurrentUser() currentUser: AuthenticatedUser,
   ): Promise<AccountRequestResponseDto> {
     return this.accountRequestService.processAccountRequest(
       id,
       processDto,
-      user.id,
+      currentUser.id,
     );
   }
 
   @Delete(':id')
-  @ApiBearerAuth()
+  @Roles('SUPER_ADMIN', 'ORGANIZATION_ADMIN')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({
     summary: 'Delete account request',
