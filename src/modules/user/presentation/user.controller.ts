@@ -23,6 +23,7 @@ import {
   CooperativeDetailsDto,
 } from './dto/current-user-response.dto';
 import { UpdateTenantDto } from './dto/update-tenant.dto';
+import { CreateTenantDto } from './dto/create-tenant.dto';
 import { TenantFilterDto } from './dto/tenant-filter.dto';
 import { TenantDetailResponseDto } from './dto/tenant-detail-response.dto';
 import { PaginationDto } from '../../../shared/dto/pagination.dto';
@@ -142,6 +143,20 @@ export class UserController {
   }
 
   // Super Admin Tenant Management Endpoints
+  @Post('tenants')
+  @Roles('SUPER_ADMIN')
+  @ApiOperation({ summary: 'Create a new tenant (Super Admin only)' })
+  @ApiResponse({
+    status: 201,
+    description: 'Tenant created successfully',
+    type: TenantDetailResponseDto,
+  })
+  async createTenant(
+    @Body() createTenantDto: CreateTenantDto,
+  ): Promise<TenantDetailResponseDto> {
+    return this.userService.createTenant(createTenantDto);
+  }
+
   @Get('tenants')
   @Roles('SUPER_ADMIN')
   @ApiOperation({ summary: 'Get all tenants (Super Admin only)' })

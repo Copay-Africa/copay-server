@@ -12,6 +12,7 @@ import {
   CooperativeDetailsDto,
 } from '../presentation/dto/current-user-response.dto';
 import { UpdateTenantDto } from '../presentation/dto/update-tenant.dto';
+import { CreateTenantDto } from '../presentation/dto/create-tenant.dto';
 import { TenantFilterDto } from '../presentation/dto/tenant-filter.dto';
 import { TenantDetailResponseDto } from '../presentation/dto/tenant-detail-response.dto';
 import { PaginationDto } from '../../../shared/dto/pagination.dto';
@@ -228,6 +229,57 @@ export class UserService {
   }
 
   // Super Admin Tenant Management Methods
+  async createTenant(
+    createTenantDto: CreateTenantDto,
+  ): Promise<TenantDetailResponseDto> {
+    // Check if phone number already exists
+    const existingUser = await this.prismaService.user.findUnique({
+      where: { phone: createTenantDto.phone },
+    });
+
+    if (existingUser) {
+      throw new ConflictException('Phone number already registered');
+    }
+
+    // Validate cooperative exists
+    const cooperative = await this.prismaService.cooperative.findUnique({
+      where: { id: createTenantDto.cooperativeId },
+    });
+
+    if (!cooperative) {
+      throw new NotFoundException('Cooperative not found');
+    }
+
+    // Hash the PIN
+    const hashedPin = await bcrypt.hash(createTenantDto.pin, 12);
+
+    // Create tenant
+    const tenant = await this.prismaService.user.create({
+      data: {
+        phone: createTenantDto.phone,
+        pin: hashedPin,
+        firstName: createTenantDto.firstName,
+        lastName: createTenantDto.lastName,
+        email: createTenantDto.email,
+        role: UserRole.TENANT,
+        status: UserStatus.ACTIVE,
+        cooperativeId: createTenantDto.cooperativeId,
+      },
+      include: {
+        cooperative: {
+          select: {
+            id: true,
+            name: true,
+            code: true,
+            status: true,
+          },
+        },
+      },
+    });
+
+    return await this.mapToTenantDetailDto(tenant);
+  }
+
   async getAllTenants(
     filterDto: TenantFilterDto,
   ): Promise<PaginatedResponseDto<TenantDetailResponseDto>> {

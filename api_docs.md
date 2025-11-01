@@ -1470,6 +1470,24 @@ Use these test credentials:
 
 ## Super Admin Tenant Management APIs
 
+### Create Tenant (Super Admin Only)
+- **POST** `/api/v1/users/tenants`
+- **Auth**: Required (SUPER_ADMIN role)
+- **Request Body**:
+```json
+{
+  "phone": "+250788123456",
+  "pin": "1234",
+  "firstName": "John",
+  "lastName": "Doe",
+  "email": "john.doe@example.com",
+  "cooperativeId": "507f1f77bcf86cd799439012",
+  "notes": "Apartment 301, Building A"
+}
+```
+- **Description**: Create a new tenant and assign them to a specific cooperative
+- **Response**: Enhanced tenant details with statistics
+
 ### Get All Tenants (Super Admin Only)
 - **GET** `/api/v1/users/tenants`
 - **Auth**: Required (SUPER_ADMIN role)
@@ -1540,6 +1558,7 @@ Use these test credentials:
 - **Response**: Confirmation message
 
 ### Tenant Management Features
+- **Tenant Creation**: Create new tenants and assign them to any cooperative
 - **Cross-Cooperative Access**: Super admins can manage tenants across all cooperatives
 - **Enhanced Details**: Includes payment statistics and complaint counts
 - **Flexible Filtering**: Filter by status, cooperative, registration date
