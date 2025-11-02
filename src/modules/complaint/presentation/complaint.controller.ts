@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Controller,
   Get,
   Post,
@@ -38,7 +39,8 @@ export class ComplaintController {
   @Roles(UserRole.TENANT, UserRole.ORGANIZATION_ADMIN, UserRole.SUPER_ADMIN)
   @ApiOperation({
     summary: 'Create a new complaint',
-    description: 'Tenants can submit complaints about issues in their cooperative housing',
+    description:
+      'Create a complaint for a specific cooperative. Tenants and organization admins can only create complaints for their own cooperative. Super admins can create complaints for any cooperative.',
   })
   @ApiResponse({
     status: 201,
@@ -49,6 +51,18 @@ export class ComplaintController {
     @Body() createComplaintDto: CreateComplaintDto,
     @CurrentUser() currentUser: AuthenticatedUser,
   ): Promise<ComplaintResponseDto> {
+    // If no cooperativeId is provided, default to user's cooperative (for backward compatibility)
+    if (!createComplaintDto.cooperativeId && currentUser.cooperativeId) {
+      createComplaintDto.cooperativeId = currentUser.cooperativeId;
+    }
+
+    // Validate cooperativeId is provided
+    if (!createComplaintDto.cooperativeId) {
+      throw new BadRequestException(
+        'cooperativeId is required. Please specify which cooperative this complaint is for.',
+      );
+    }
+
     return this.complaintService.createComplaint(createComplaintDto, {
       userId: currentUser.id,
       cooperativeId: currentUser.cooperativeId!,
@@ -60,7 +74,8 @@ export class ComplaintController {
   @Roles(UserRole.TENANT, UserRole.ORGANIZATION_ADMIN, UserRole.SUPER_ADMIN)
   @ApiOperation({
     summary: 'Get complaints',
-    description: 'Get complaints based on user role - tenants see their own, admins see all in cooperative',
+    description:
+      'Get complaints based on user role - tenants see their own, admins see all in cooperative',
   })
   @ApiResponse({
     status: 200,
@@ -94,7 +109,9 @@ export class ComplaintController {
     @CurrentUser() currentUser: AuthenticatedUser,
   ): Promise<PaginatedResponseDto<ComplaintResponseDto>> {
     // Force filter to current user's complaints
-    const userFilterDto = Object.assign(new ComplaintFilterDto(), filterDto, { userId: currentUser.id });
+    const userFilterDto = Object.assign(new ComplaintFilterDto(), filterDto, {
+      userId: currentUser.id,
+    });
     return this.complaintService.findAll(userFilterDto, {
       userId: currentUser.id,
       cooperativeId: currentUser.cooperativeId!,
@@ -106,7 +123,8 @@ export class ComplaintController {
   @Roles(UserRole.ORGANIZATION_ADMIN, UserRole.SUPER_ADMIN)
   @ApiOperation({
     summary: 'Get organization complaints',
-    description: 'Organization admins can view all complaints from their cooperative tenants',
+    description:
+      'Organization admins can view all complaints from their cooperative tenants',
   })
   @ApiResponse({
     status: 200,
@@ -128,7 +146,8 @@ export class ComplaintController {
   @Roles(UserRole.ORGANIZATION_ADMIN, UserRole.SUPER_ADMIN)
   @ApiOperation({
     summary: 'Get complaint statistics for organization',
-    description: 'Get complaint summary statistics including status breakdown and priority distribution',
+    description:
+      'Get complaint summary statistics including status breakdown and priority distribution',
   })
   @ApiResponse({
     status: 200,
@@ -153,7 +172,8 @@ export class ComplaintController {
   @Roles(UserRole.TENANT, UserRole.ORGANIZATION_ADMIN, UserRole.SUPER_ADMIN)
   @ApiOperation({
     summary: 'Get complaint by ID',
-    description: 'Get detailed complaint information. Tenants can only view their own complaints.',
+    description:
+      'Get detailed complaint information. Tenants can only view their own complaints.',
   })
   @ApiResponse({
     status: 200,
@@ -175,7 +195,8 @@ export class ComplaintController {
   @Roles(UserRole.ORGANIZATION_ADMIN, UserRole.SUPER_ADMIN)
   @ApiOperation({
     summary: 'Update complaint status',
-    description: 'Organization admins can update complaint status and add resolution messages',
+    description:
+      'Organization admins can update complaint status and add resolution messages',
   })
   @ApiResponse({
     status: 200,

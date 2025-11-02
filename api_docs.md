@@ -777,6 +777,7 @@ The Complaints API provides comprehensive complaint management for both tenants 
 
 ```json
 {
+  "cooperativeId": "507f1f77bcf86cd799439012",
   "title": "Water pressure issue in apartment 301",
   "description": "The water pressure in the bathroom has been very low for the past week. It affects daily activities like showering and washing dishes.",
   "priority": "MEDIUM",
@@ -791,8 +792,19 @@ The Complaints API provides comprehensive complaint management for both tenants 
 }
 ```
 
-**Priority Levels:**
+**Fields:**
+- `cooperativeId` (optional): ID of the cooperative/organization this complaint is for. If not provided, defaults to the user's cooperative.
+- `title` (required): Title of the complaint
+- `description` (required): Detailed description of the complaint  
+- `priority` (optional): Priority level (LOW, MEDIUM, HIGH, URGENT). Defaults to MEDIUM.
+- `attachments` (optional): Array of attachment metadata
 
+**Access Control:**
+- **Tenants**: Can only create complaints for their own cooperative
+- **Organization Admins**: Can only create complaints for their own cooperative  
+- **Super Admins**: Can create complaints for any cooperative
+
+**Priority Levels:**
 - `LOW`, `MEDIUM`, `HIGH`, `URGENT`
 
 **Response:**

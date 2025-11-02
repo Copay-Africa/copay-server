@@ -30,6 +30,15 @@ export class ComplaintService {
     createComplaintDto: CreateComplaintDto,
     context: ComplaintContext,
   ): Promise<ComplaintResponseDto> {
+    const targetCooperativeId =
+      createComplaintDto.cooperativeId || context.cooperativeId;
+    if (!targetCooperativeId) {
+      throw new BadRequestException('cooperativeId is required');
+    }
+
+    // Validate cooperative access
+    await this.validateCooperativeAccess(targetCooperativeId, context);
+
     // Create the complaint
     const complaint = await this.prismaService.complaint.create({
       data: {
@@ -39,7 +48,7 @@ export class ComplaintService {
         status: ComplaintStatus.OPEN,
         attachments: createComplaintDto.attachments,
         userId: context.userId,
-        cooperativeId: context.cooperativeId,
+        cooperativeId: targetCooperativeId,
       },
       include: {
         user: {
@@ -69,16 +78,56 @@ export class ComplaintService {
         metadata: {
           complaintId: complaint.id,
           priority: complaint.priority,
+          targetCooperativeId: targetCooperativeId,
         },
         relatedComplaintId: complaint.id,
       },
       {
         userId: context.userId,
-        cooperativeId: context.cooperativeId,
+        cooperativeId: targetCooperativeId,
       },
     );
 
     return this.mapToResponseDto(complaint);
+  }
+
+  private async validateCooperativeAccess(
+    targetCooperativeId: string,
+    context: ComplaintContext,
+  ): Promise<void> {
+    // Check if the cooperative exists
+    const cooperative = await this.prismaService.cooperative.findUnique({
+      where: { id: targetCooperativeId },
+      select: { id: true, name: true, status: true },
+    });
+
+    if (!cooperative) {
+      throw new NotFoundException('Cooperative not found');
+    }
+
+    if (cooperative.status !== 'ACTIVE') {
+      throw new BadRequestException(
+        'Cannot create complaints for inactive cooperatives',
+      );
+    }
+
+    // Role-based access validation
+    if (context.userRole === UserRole.TENANT) {
+      // Tenants can only create complaints for their own cooperative
+      if (targetCooperativeId !== context.cooperativeId) {
+        throw new ForbiddenException(
+          'Tenants can only create complaints for their own cooperative',
+        );
+      }
+    } else if (context.userRole === UserRole.ORGANIZATION_ADMIN) {
+      // Organization admins can only create complaints for their own cooperative
+      if (targetCooperativeId !== context.cooperativeId) {
+        throw new ForbiddenException(
+          'Organization admins can only create complaints for their own cooperative',
+        );
+      }
+    }
+    // Super admins can create complaints for any cooperative
   }
 
   async findAll(
@@ -238,7 +287,9 @@ export class ComplaintService {
   ): Promise<ComplaintResponseDto> {
     // Only admins can update complaint status
     if (context.userRole === UserRole.TENANT) {
-      throw new ForbiddenException('Insufficient permissions to update complaint status');
+      throw new ForbiddenException(
+        'Insufficient permissions to update complaint status',
+      );
     }
 
     const existingComplaint = await this.prismaService.complaint.findUnique({
@@ -276,8 +327,10 @@ export class ComplaintService {
       updateData.resolution = updateStatusDto.resolution;
     }
 
-    if (updateStatusDto.status === ComplaintStatus.RESOLVED || 
-        updateStatusDto.status === ComplaintStatus.CLOSED) {
+    if (
+      updateStatusDto.status === ComplaintStatus.RESOLVED ||
+      updateStatusDto.status === ComplaintStatus.CLOSED
+    ) {
       updateData.resolvedAt = new Date();
     }
 
@@ -336,7 +389,9 @@ export class ComplaintService {
   ): Promise<any> {
     // Only admins can view complaint statistics
     if (context.userRole === UserRole.TENANT) {
-      throw new ForbiddenException('Insufficient permissions to view complaint statistics');
+      throw new ForbiddenException(
+        'Insufficient permissions to view complaint statistics',
+      );
     }
 
     const where: any = {};
@@ -406,15 +461,15 @@ export class ComplaintService {
       summary: {
         totalComplaints,
       },
-      statusBreakdown: statusBreakdown.map(item => ({
+      statusBreakdown: statusBreakdown.map((item) => ({
         status: item.status,
         count: item._count.status,
       })),
-      priorityBreakdown: priorityBreakdown.map(item => ({
+      priorityBreakdown: priorityBreakdown.map((item) => ({
         priority: item.priority,
         count: item._count.priority,
       })),
-      recentComplaints: recentComplaints.map(complaint => ({
+      recentComplaints: recentComplaints.map((complaint) => ({
         id: complaint.id,
         title: complaint.title,
         status: complaint.status,
