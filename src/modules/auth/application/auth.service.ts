@@ -34,7 +34,7 @@ export class AuthService {
     ipAddress?: string,
     userAgent?: string,
   ): Promise<AuthResponseDto> {
-    const { phone, pin } = loginDto;
+    const { phone, pin, fcmToken } = loginDto;
 
     try {
       // Find user by phone
@@ -73,10 +73,21 @@ export class AuthService {
         throw new UnauthorizedException('Invalid phone number or PIN');
       }
 
-      // Update last login
+      // Update last login and FCM token if provided
+      const updateData: {
+        lastLoginAt: Date;
+        fcmToken?: string;
+        fcmTokenUpdatedAt?: Date;
+      } = { lastLoginAt: new Date() };
+
+      if (fcmToken) {
+        updateData.fcmToken = fcmToken;
+        updateData.fcmTokenUpdatedAt = new Date();
+      }
+
       await this.prismaService.user.update({
         where: { id: user.id },
-        data: { lastLoginAt: new Date() },
+        data: updateData,
       });
 
       // Log successful login
@@ -142,7 +153,7 @@ export class AuthService {
   }
 
   private getTokenExpirationInSeconds(): number {
-    const expiresIn = this.configService.get('jwt.expiresIn');
+    const expiresIn = this.configService.get<string>('jwt.expiresIn');
 
     // Convert JWT expiration string to seconds
     if (typeof expiresIn === 'string') {

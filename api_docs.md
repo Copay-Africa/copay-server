@@ -116,12 +116,21 @@ Some endpoints are public and don't require authentication:
 
 **POST** `/auth/login`
 
+**Request Body:**
+
 ```json
 {
   "phone": "+250788000001",
-  "pin": "1234"
+  "pin": "1234",
+  "fcmToken": "eK4VUu1234567890:APA91bFwOoE1234567890abcdefgh..."
 }
 ```
+
+**Parameters:**
+
+- `phone` (required): Phone number with country code
+- `pin` (required): 4-digit PIN
+- `fcmToken` (optional): Firebase Cloud Messaging token for push notifications
 
 **Response:**
 
@@ -138,6 +147,12 @@ Some endpoints are public and don't require authentication:
   }
 }
 ```
+
+**Notes:**
+
+- When `fcmToken` is provided, it will be stored for the user and used for push notifications
+- The FCM token is updated each time the user logs in with a new token
+- Push notifications will be sent to the most recent FCM token provided
 
 #### Pin Reset
 
@@ -1008,6 +1023,80 @@ curl -X GET "https://api.copay.com/complaints/organization/stats?fromDate=2025-1
 ```
 
 **Note:** When status is set to `RESOLVED` or `CLOSED`, the `resolvedAt` timestamp is automatically set.
+
+---
+
+### Notifications
+
+The Notifications API provides in-app notifications and push notification management.
+
+#### Get In-App Notifications
+
+**GET** `/notifications/in-app`
+
+**Description:** Get in-app notifications for the current user.
+
+**Query Parameters:**
+
+- `limit` (optional): Maximum number of notifications to return (default: 20)
+
+**Response:**
+
+```json
+{
+  "data": [
+    {
+      "id": "507f1f77bcf86cd799439020",
+      "type": "IN_APP",
+      "status": "SENT",
+      "title": "Monthly Rent Due Reminder",
+      "message": "Your Monthly Rent is due (Amount: RWF 50,000). Please make your payment on time.",
+      "createdAt": "2025-11-02T10:30:00Z",
+      "reminder": {
+        "id": "507f1f77bcf86cd799439019",
+        "title": "Monthly Rent Payment",
+        "type": "PAYMENT_DUE"
+      },
+      "payment": null
+    }
+  ]
+}
+```
+
+#### Mark Notification as Read
+
+**PATCH** `/notifications/in-app/:id/read`
+
+**Description:** Mark an in-app notification as read.
+
+**Response:**
+
+```json
+{
+  "message": "Notification marked as read"
+}
+```
+
+#### Push Notification Features
+
+**Automatic Push Notifications:**
+
+- **Payment Reminders**: Sent based on user's reminder preferences
+- **Payment Status Updates**: Sent when payment status changes
+- **Account Updates**: Sent for important account changes
+
+**Notification Types:**
+
+- `SMS` - Text message notifications
+- `EMAIL` - Email notifications (coming soon)
+- `IN_APP` - In-app notifications stored in database
+- `PUSH_NOTIFICATION` - Firebase Cloud Messaging push notifications
+
+**FCM Token Management:**
+
+- FCM tokens are automatically updated during login
+- Users receive push notifications on their most recent device
+- Invalid tokens are automatically cleaned up during retry attempts
 
 ---
 

@@ -185,6 +185,10 @@ model User {
   passwordResetToken   String?
   passwordResetExpires DateTime?
 
+  // Push notifications
+  fcmToken          String?   // Firebase Cloud Messaging token
+  fcmTokenUpdatedAt DateTime? // When FCM token was last updated
+
   // Relationships
   sentPayments             Payment[]        @relation("PaymentSender")
   receivedPayments         Payment[]        @relation("PaymentReceiver")
