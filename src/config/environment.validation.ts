@@ -72,4 +72,35 @@ export class EnvironmentVariables {
   @IsString()
   @IsOptional()
   SWAGGER_PATH?: string = 'docs';
+
+  // SMS Configuration
+  @IsString()
+  @IsOptional()
+  FDI_SMS_BASE_URL?: string;
+
+  @IsString()
+  @IsOptional()
+  FDI_SMS_USERNAME?: string;
+
+  @IsString()
+  @IsOptional()
+  FDI_SMS_PASSWORD?: string;
+
+  @IsString()
+  @IsOptional()
+  FDI_SMS_SENDER_ID?: string;
+
+  @Transform(({ value }) => value === 'true')
+  @IsBoolean()
+  @IsOptional()
+  SMS_ENABLED?: boolean = false;
+
+  // Firebase Configuration
+  @IsString()
+  @IsOptional()
+  FIREBASE_PROJECT_ID?: string;
+
+  @IsString()
+  @IsOptional()
+  FIREBASE_SERVICE_ACCOUNT_KEY?: string;
 }

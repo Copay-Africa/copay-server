@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import * as admin from 'firebase-admin';
 
 export interface PushNotificationPayload {
   title: string;
@@ -16,27 +17,106 @@ export interface PushNotificationResult {
 
 @Injectable()
 export class FcmService {
-  constructor(private configService: ConfigService) {}
+  private firebaseApp: admin.app.App;
+  private isFirebaseInitialized = false;
+  private useMockImplementation = false;
+
+  constructor(private configService: ConfigService) {
+    this.initializeFirebase();
+  }
+
+  private initializeFirebase(): void {
+    try {
+      const serviceAccountKey = this.configService.get<string>(
+        'FIREBASE_SERVICE_ACCOUNT_KEY',
+      );
+      const projectId = this.configService.get<string>('FIREBASE_PROJECT_ID');
+
+      if (!serviceAccountKey || !projectId) {
+        console.warn(
+          'Firebase configuration not found. Push notifications will be mocked.',
+        );
+        this.useMockImplementation = true;
+        return;
+      }
+
+      // Parse service account key (should be JSON string in env var)
+      const serviceAccount = JSON.parse(
+        serviceAccountKey,
+      ) as admin.ServiceAccount;
+
+      if (!admin.apps.length) {
+        this.firebaseApp = admin.initializeApp({
+          credential: admin.credential.cert(serviceAccount),
+          projectId: projectId,
+        });
+      } else {
+        this.firebaseApp = admin.app();
+      }
+
+      this.isFirebaseInitialized = true;
+      console.log(`Firebase Admin SDK initialized for project: ${projectId}`);
+    } catch (error) {
+      console.error('Failed to initialize Firebase Admin SDK:', error.message);
+      this.useMockImplementation = true;
+    }
+  }
 
   async sendPushNotification(
     fcmToken: string,
     payload: PushNotificationPayload,
   ): Promise<PushNotificationResult> {
     try {
-      // For now, return a mock success response
-      // TODO: Implement actual FCM sending when Firebase Admin SDK is installed
+      // Use mock implementation if Firebase is not properly initialized
+      if (this.useMockImplementation || !this.isFirebaseInitialized) {
+        console.log('Mock Push Notification:', {
+          token: fcmToken.substring(0, 20) + '...',
+          payload,
+        });
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        return {
+          success: true,
+          messageId: `mock_message_${Date.now()}`,
+        };
+      }
 
-      console.log('Mock Push Notification:', {
-        token: fcmToken.substring(0, 20) + '...',
-        payload,
-      });
+      // REAL FCM IMPLEMENTATION
+      if (!this.firebaseApp) {
+        throw new Error('Firebase Admin SDK not initialized');
+      }
 
-      // Simulate network delay
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      const message: admin.messaging.Message = {
+        token: fcmToken,
+        notification: {
+          title: payload.title,
+          body: payload.body,
+          imageUrl: payload.imageUrl,
+        },
+        data: payload.data || {},
+        android: {
+          notification: {
+            icon: 'ic_notification',
+            color: '#2196F3',
+            sound: 'default',
+            clickAction: 'FLUTTER_NOTIFICATION_CLICK',
+          },
+        },
+        apns: {
+          payload: {
+            aps: {
+              sound: 'default',
+              badge: 1,
+              category: 'payment_reminder',
+            },
+          },
+        },
+      };
+
+      const response = await admin.messaging().send(message);
 
       return {
         success: true,
-        messageId: `mock_message_${Date.now()}`,
+        messageId: response,
       };
     } catch (error) {
       console.error('Push notification send error:', error.message);
@@ -84,13 +164,30 @@ export class FcmService {
         return false;
       }
 
-      // Mock validation - returns true for properly formatted tokens
-      console.log(
-        `Mock FCM token validation for: ${fcmToken.substring(0, 20)}...`,
-      );
+      // Use mock validation if Firebase is not properly initialized
+      if (this.useMockImplementation || !this.isFirebaseInitialized) {
+        console.log(
+          `Mock FCM token validation for: ${fcmToken.substring(0, 20)}...`,
+        );
+        return true;
+      }
+
+      // Real FCM token validation
+      // Note: Firebase Admin SDK doesn't have a direct token validation method
+      // We can try to send a dry-run message to validate the token
+      const dryRunMessage: admin.messaging.Message = {
+        token: fcmToken,
+        notification: {
+          title: 'Validation',
+          body: 'Token validation',
+        },
+      };
+
+      await admin.messaging().send(dryRunMessage, true); // dry-run = true
       return true;
     } catch (error) {
       console.error('FCM token validation error:', error.message);
+      // Invalid tokens will throw errors, so return false
       return false;
     }
   }

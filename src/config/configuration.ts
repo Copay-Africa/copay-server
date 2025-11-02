@@ -40,3 +40,8 @@ export const smsConfig = registerAs('sms', () => ({
     enabled: process.env.SMS_ENABLED === 'true',
   },
 }));
+
+export const firebaseConfig = registerAs('firebase', () => ({
+  projectId: process.env.FIREBASE_PROJECT_ID,
+  serviceAccountKey: process.env.FIREBASE_SERVICE_ACCOUNT_KEY,
+}));

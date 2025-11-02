@@ -24,6 +24,7 @@ import {
   appConfig,
   rateLimitConfig,
   smsConfig,
+  firebaseConfig,
   validateConfig,
 } from './config';
 
@@ -39,6 +40,7 @@ import {
         appConfig,
         rateLimitConfig,
         smsConfig,
+        firebaseConfig,
       ],
       validate: validateConfig,
       envFilePath: ['.env'],
