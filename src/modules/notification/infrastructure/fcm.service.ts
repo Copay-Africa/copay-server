@@ -22,28 +22,28 @@ export class FcmService {
   private useMockImplementation = false;
 
   constructor(private configService: ConfigService) {
-    this.initializeFirebase();
+    // Don't initialize Firebase in constructor for serverless environments
+    // Initialize lazily when needed
   }
 
-  private initializeFirebase(): void {
-    try {
-      const serviceAccountKey = this.configService.get<string>(
-        'firebase.serviceAccountKey',
-      );
-      const projectId = this.configService.get<string>('firebase.projectId');
+  private async initializeFirebase(): Promise<void> {
+    if (this.isFirebaseInitialized || this.useMockImplementation) {
+      return;
+    }
 
-      if (!serviceAccountKey || !projectId) {
+    try {
+      const projectId = this.configService.get<string>('firebase.projectId');
+      const serviceAccount = this.configService.get<any>(
+        'firebase.serviceAccount',
+      );
+
+      if (!serviceAccount || !projectId || !serviceAccount.private_key) {
         console.warn(
           'Firebase configuration not found. Push notifications will be mocked.',
         );
         this.useMockImplementation = true;
         return;
       }
-
-      // Parse service account key (should be JSON string in env var)
-      const serviceAccount = JSON.parse(
-        serviceAccountKey,
-      ) as admin.ServiceAccount;
 
       if (!admin.apps.length) {
         this.firebaseApp = admin.initializeApp({
@@ -57,7 +57,10 @@ export class FcmService {
       this.isFirebaseInitialized = true;
       console.log(`Firebase Admin SDK initialized for project: ${projectId}`);
     } catch (error) {
-      console.error('Failed to initialize Firebase Admin SDK:', error.message);
+      console.error(
+        'Failed to initialize Firebase Admin SDK:',
+        error instanceof Error ? error.message : 'Unknown error',
+      );
       this.useMockImplementation = true;
     }
   }
@@ -67,6 +70,9 @@ export class FcmService {
     payload: PushNotificationPayload,
   ): Promise<PushNotificationResult> {
     try {
+      // Initialize Firebase if not already done
+      await this.initializeFirebase();
+
       // Use mock implementation if Firebase is not properly initialized
       if (this.useMockImplementation || !this.isFirebaseInitialized) {
         console.log('Mock Push Notification:', {
@@ -163,6 +169,9 @@ export class FcmService {
       if (!fcmToken || fcmToken.length < 10) {
         return false;
       }
+
+      // Initialize Firebase if not already done
+      await this.initializeFirebase();
 
       // Use mock validation if Firebase is not properly initialized
       if (this.useMockImplementation || !this.isFirebaseInitialized) {

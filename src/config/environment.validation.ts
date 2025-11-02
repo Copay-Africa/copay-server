@@ -102,5 +102,45 @@ export class EnvironmentVariables {
 
   @IsString()
   @IsOptional()
-  FIREBASE_SERVICE_ACCOUNT_KEY?: string;
+  FIREBASE_SERVICE_ACCOUNT_TYPE?: string;
+
+  @IsString()
+  @IsOptional()
+  FIREBASE_SERVICE_ACCOUNT_PROJECT_ID?: string;
+
+  @IsString()
+  @IsOptional()
+  FIREBASE_SERVICE_ACCOUNT_PRIVATE_KEY_ID?: string;
+
+  @IsString()
+  @IsOptional()
+  FIREBASE_SERVICE_ACCOUNT_PRIVATE_KEY?: string;
+
+  @IsString()
+  @IsOptional()
+  FIREBASE_SERVICE_ACCOUNT_CLIENT_EMAIL?: string;
+
+  @IsString()
+  @IsOptional()
+  FIREBASE_SERVICE_ACCOUNT_CLIENT_ID?: string;
+
+  @IsString()
+  @IsOptional()
+  FIREBASE_SERVICE_ACCOUNT_AUTH_URI?: string;
+
+  @IsString()
+  @IsOptional()
+  FIREBASE_SERVICE_ACCOUNT_TOKEN_URI?: string;
+
+  @IsString()
+  @IsOptional()
+  FIREBASE_SERVICE_ACCOUNT_AUTH_PROVIDER_CERT_URL?: string;
+
+  @IsString()
+  @IsOptional()
+  FIREBASE_SERVICE_ACCOUNT_CLIENT_CERT_URL?: string;
+
+  @IsString()
+  @IsOptional()
+  FIREBASE_SERVICE_ACCOUNT_UNIVERSE_DOMAIN?: string;
 }

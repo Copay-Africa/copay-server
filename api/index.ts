@@ -33,14 +33,16 @@ async function createApp() {
     // Get config service
     const configService = app.get(ConfigService);
 
-    // Connect to Prisma
+    // Connect to Prisma with better error handling
     try {
       const prisma = app.get(PrismaService);
       if (prisma && typeof prisma.$connect === 'function') {
         await prisma.$connect();
+        logger.log('Database connection established');
       }
     } catch (err) {
       logger.error('PrismaService connection error', err);
+      // Don't throw here, let the app start and handle DB errors per request
     }
 
     // Enable CORS with more permissive settings for serverless
@@ -83,24 +85,31 @@ async function createApp() {
 
 // Export the handler for Vercel
 export default async function handler(req: any, res: any) {
+  const logger = new Logger('VercelHandler');
+
   try {
+    logger.log(`Handling ${req.method} ${req.url}`);
+
     const app = await createApp();
     const fastifyInstance = app.getHttpAdapter().getInstance();
-    
+
     // Ensure Fastify is ready
     await fastifyInstance.ready();
-    
+
     // Handle the request
     fastifyInstance.server.emit('request', req, res);
   } catch (error) {
-    console.error('Handler error:', error);
-    
+    logger.error('Handler error:', error);
+
     // Ensure response headers are set correctly
     if (!res.headersSent) {
-      res.status(500).json({ 
+      res.status(500).json({
         error: 'Internal Server Error',
-        message: process.env.NODE_ENV === 'development' ? error.message : 'Something went wrong',
-        timestamp: new Date().toISOString()
+        message:
+          error instanceof Error ? error.message : 'Something went wrong',
+        timestamp: new Date().toISOString(),
+        url: req.url,
+        method: req.method,
       });
     }
   }
