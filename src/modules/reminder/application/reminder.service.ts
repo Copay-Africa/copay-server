@@ -21,55 +21,93 @@ export class ReminderService {
     userId: string,
     cooperativeId?: string,
   ): Promise<ReminderResponseDto> {
-    // Validate payment type if provided
-    if (createReminderDto.paymentTypeId) {
-      const paymentType = await this.prismaService.paymentType.findUnique({
-        where: { id: createReminderDto.paymentTypeId },
-      });
+    try {
+      // Validate payment type if provided
+      if (createReminderDto.paymentTypeId) {
+        const paymentType = await this.prismaService.paymentType.findUnique({
+          where: { id: createReminderDto.paymentTypeId },
+        });
 
-      if (!paymentType) {
-        throw new NotFoundException('Payment type not found');
+        if (!paymentType) {
+          throw new NotFoundException('Payment type not found');
+        }
+
+        if (!paymentType.isActive) {
+          throw new BadRequestException('Payment type is not active');
+        }
+
+        // Use payment type's cooperative if not specified
+        if (!cooperativeId) {
+          cooperativeId = paymentType.cooperativeId;
+        }
       }
 
-      if (!paymentType.isActive) {
-        throw new BadRequestException('Payment type is not active');
+      // Validate dates
+      const reminderDate = new Date(createReminderDto.reminderDate);
+      if (isNaN(reminderDate.getTime())) {
+        throw new BadRequestException('Invalid reminder date format');
       }
 
-      // Use payment type's cooperative if not specified
-      if (!cooperativeId) {
-        cooperativeId = paymentType.cooperativeId;
-      }
-    }
-
-    // Calculate next trigger date
-    const reminderDate = new Date(createReminderDto.reminderDate);
-    const nextTrigger = this.calculateNextTrigger(
-      reminderDate,
-      createReminderDto.advanceNoticeDays || 0,
-    );
-
-    const reminder = await this.prismaService.reminder.create({
-      data: {
-        ...createReminderDto,
-        userId,
-        cooperativeId,
+      // Calculate next trigger date
+      const nextTrigger = this.calculateNextTrigger(
         reminderDate,
-        nextTrigger,
+        createReminderDto.advanceNoticeDays || 0,
+      );
+
+      // Prepare the data for creation
+      const createData: any = {
+        title: createReminderDto.title,
+        description: createReminderDto.description,
+        type: createReminderDto.type,
+        userId,
+        paymentTypeId: createReminderDto.paymentTypeId || null,
+        reminderDate,
+        isRecurring: createReminderDto.isRecurring || false,
+        recurringPattern: createReminderDto.recurringPattern || null,
         notificationTypes: createReminderDto.notificationTypes as string[],
-      },
-      include: {
-        paymentType: {
-          select: {
-            id: true,
-            name: true,
-            amount: true,
-            description: true,
+        advanceNoticeDays: createReminderDto.advanceNoticeDays || 0,
+        customAmount: createReminderDto.customAmount || null,
+        notes: createReminderDto.notes || null,
+        nextTrigger,
+      };
+
+      // Only add cooperativeId if it's provided
+      if (cooperativeId) {
+        createData.cooperativeId = cooperativeId;
+      }
+
+      const reminder = await this.prismaService.reminder.create({
+        data: createData,
+        include: {
+          paymentType: {
+            select: {
+              id: true,
+              name: true,
+              amount: true,
+              description: true,
+            },
           },
         },
-      },
-    });
+      });
 
-    return this.mapToResponseDto(reminder);
+      return this.mapToResponseDto(reminder);
+    } catch (error) {
+      // Log the error for debugging
+      console.error('Error creating reminder:', error);
+
+      // Re-throw known exceptions
+      if (
+        error instanceof NotFoundException ||
+        error instanceof BadRequestException
+      ) {
+        throw error;
+      }
+
+      // Wrap unknown errors
+      throw new BadRequestException(
+        `Failed to create reminder: ${error.message}`,
+      );
+    }
   }
 
   async findAll(
@@ -376,6 +414,16 @@ export class ReminderService {
     reminderDate: Date,
     advanceNoticeDays: number,
   ): Date {
+    if (!reminderDate || isNaN(reminderDate.getTime())) {
+      throw new BadRequestException('Invalid reminder date provided');
+    }
+
+    if (advanceNoticeDays < 0 || advanceNoticeDays > 30) {
+      throw new BadRequestException(
+        'Advance notice days must be between 0 and 30',
+      );
+    }
+
     const trigger = new Date(reminderDate);
     trigger.setDate(trigger.getDate() - advanceNoticeDays);
     return trigger;
