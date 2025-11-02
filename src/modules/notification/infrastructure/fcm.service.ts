@@ -28,9 +28,9 @@ export class FcmService {
   private initializeFirebase(): void {
     try {
       const serviceAccountKey = this.configService.get<string>(
-        'FIREBASE_SERVICE_ACCOUNT_KEY',
+        'firebase.serviceAccountKey',
       );
-      const projectId = this.configService.get<string>('FIREBASE_PROJECT_ID');
+      const projectId = this.configService.get<string>('firebase.projectId');
 
       if (!serviceAccountKey || !projectId) {
         console.warn(
