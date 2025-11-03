@@ -26,15 +26,4 @@ export class AppController {
   getHealth(): object {
     return this.appService.getHealth();
   }
-
-  @Public()
-  @Get('health')
-  @ApiOperation({ summary: 'Detailed health check' })
-  @ApiResponse({
-    status: 200,
-    description: 'Detailed health status',
-  })
-  getDetailedHealth(): object {
-    return this.appService.getDetailedHealth();
-  }
 }
