@@ -10,6 +10,7 @@ import { Cache } from 'cache-manager';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { InitiatePaymentDto } from '../presentation/dto/initiate-payment.dto';
 import { PaymentResponseDto } from '../presentation/dto/payment-response.dto';
+import { PaymentSearchDto } from '../presentation/dto/payment-search.dto';
 import { PaymentWebhookDto } from '../presentation/dto/payment-webhook.dto';
 import { PaginationDto } from '../../../shared/dto/pagination.dto';
 import { PaginatedResponseDto } from '../../../shared/dto/paginated-response.dto';
@@ -31,9 +32,8 @@ export class PaymentService {
   async initiatePayment(
     initiatePaymentDto: InitiatePaymentDto,
     senderId: string,
-    targetCooperativeId?: string, // Allow specifying target cooperative
+    targetCooperativeId?: string,
   ): Promise<PaymentResponseDto> {
-    // Get payment type and validate first
     const paymentType = await this.prismaService.paymentType.findUnique({
       where: { id: initiatePaymentDto.paymentTypeId },
       include: { cooperative: true },
@@ -47,7 +47,6 @@ export class PaymentService {
       throw new BadRequestException('Payment type is not active');
     }
 
-    // Use the cooperative ID from the payment type if no target cooperative specified
     const cooperativeId = targetCooperativeId || paymentType.cooperativeId;
 
     const existingPayment = await this.prismaService.payment.findFirst({
@@ -60,7 +59,6 @@ export class PaymentService {
       return this.findById(existingPayment.id, senderId, cooperativeId);
     }
 
-    // Validate cooperative access (users can pay for any active cooperative)
     const cooperative = await this.prismaService.cooperative.findUnique({
       where: { id: cooperativeId },
     });
@@ -71,7 +69,6 @@ export class PaymentService {
       );
     }
 
-    // Ensure payment type belongs to the target cooperative
     if (paymentType.cooperativeId !== cooperativeId) {
       throw new BadRequestException(
         'Payment type does not belong to the specified cooperative',
@@ -152,6 +149,7 @@ export class PaymentService {
         `fallback_${initiatePaymentDto.idempotencyKey}`;
 
       let paymentTransaction;
+
       try {
         paymentTransaction = await this.prismaService.paymentTransaction.create(
           {
@@ -706,65 +704,73 @@ export class PaymentService {
         this.prismaService.payment.count({ where }),
 
         // Total amount aggregate
-        this.prismaService.payment.aggregate({
-          where,
-          _sum: {
-            amount: true,
-          },
-          _avg: {
-            amount: true,
-          },
-        }).catch(() => ({ _sum: { amount: 0 }, _avg: { amount: 0 } })),
+        this.prismaService.payment
+          .aggregate({
+            where,
+            _sum: {
+              amount: true,
+            },
+            _avg: {
+              amount: true,
+            },
+          })
+          .catch(() => ({ _sum: { amount: 0 }, _avg: { amount: 0 } })),
 
         // Status breakdown
-        this.prismaService.payment.groupBy({
-          by: ['status'],
-          where,
-          _count: {
-            status: true,
-          },
-          _sum: {
-            amount: true,
-          },
-        }).catch(() => []),
+        this.prismaService.payment
+          .groupBy({
+            by: ['status'],
+            where,
+            _count: {
+              status: true,
+            },
+            _sum: {
+              amount: true,
+            },
+          })
+          .catch(() => []),
 
         // Payment method breakdown - filter out null values
-        this.prismaService.payment.groupBy({
-          by: ['paymentMethod'],
-          where: {
-            ...where,
-            paymentMethod: { not: null },
-          },
-          _count: {
-            paymentMethod: true,
-          },
-          _sum: {
-            amount: true,
-          },
-        }).catch(() => []),
+        this.prismaService.payment
+          .groupBy({
+            by: ['paymentMethod'],
+            where: {
+              ...where,
+              paymentMethod: { not: null },
+            },
+            _count: {
+              paymentMethod: true,
+            },
+            _sum: {
+              amount: true,
+            },
+          })
+          .catch(() => []),
 
         // Recent payments (last 10)
-        this.prismaService.payment.findMany({
-          where,
-          orderBy: {
-            createdAt: 'desc',
-          },
-          take: 10,
-          include: {
-            sender: {
-              select: {
-                firstName: true,
-                lastName: true,
-                phone: true,
+        this.prismaService.payment
+          .findMany({
+            where,
+            orderBy: {
+              createdAt: 'desc',
+            },
+            take: 10,
+            include: {
+              sender: {
+                select: {
+                  firstName: true,
+                  lastName: true,
+                  phone: true,
+                },
+              },
+              paymentType: {
+                select: {
+                  name: true,
+                },
               },
             },
-            paymentType: {
-              select: {
-                name: true,
-              },
-            },
-          },
-        }).catch(() => []),
+          })
+          .catch(() => []),
       ]);
 
       return {
@@ -788,7 +794,9 @@ export class PaymentService {
           amount: payment.amount,
           status: payment.status,
           paymentType: payment.paymentType?.name || 'Unknown',
-          sender: `${payment.sender?.firstName || ''} ${payment.sender?.lastName || ''}`.trim() || 'Unknown',
+          sender:
+            `${payment.sender?.firstName || ''} ${payment.sender?.lastName || ''}`.trim() ||
+            'Unknown',
           senderPhone: payment.sender?.phone || '',
           createdAt: payment.createdAt,
         })),
@@ -866,6 +874,134 @@ export class PaymentService {
     // - Send SMS/Email to user about payment status
     // - Notify organization admin if needed
     // - Update any related records (balances, etc.)
+  }
+
+  async searchPayments(
+    searchDto: PaymentSearchDto,
+    userId: string,
+    userCooperativeId: string,
+    userRole: UserRole,
+  ): Promise<PaginatedResponseDto<PaymentResponseDto>> {
+    const {
+      page = 1,
+      limit = 10,
+      sortBy = 'createdAt',
+      sortOrder = 'desc',
+    } = searchDto;
+    const skip = (page - 1) * limit;
+
+    // Build where clause based on user role and search criteria
+    const whereClause: any = {};
+
+    // Role-based access control
+    if (userRole === UserRole.TENANT) {
+      whereClause.senderId = userId;
+    } else if (userRole === UserRole.ORGANIZATION_ADMIN) {
+      whereClause.cooperativeId = userCooperativeId;
+    } else if (userRole === UserRole.SUPER_ADMIN) {
+      // Super admin can search across all cooperatives
+      if (searchDto.cooperativeId) {
+        whereClause.cooperativeId = searchDto.cooperativeId;
+      }
+    }
+
+    // Apply search filters
+    if (searchDto.search) {
+      whereClause.OR = [
+        { description: { contains: searchDto.search, mode: 'insensitive' } },
+        {
+          paymentReference: { contains: searchDto.search, mode: 'insensitive' },
+        },
+      ];
+    }
+
+    if (searchDto.status) {
+      whereClause.status = searchDto.status;
+    }
+
+    if (searchDto.paymentMethod) {
+      whereClause.paymentMethod = searchDto.paymentMethod;
+    }
+
+    if (searchDto.paymentTypeId) {
+      whereClause.paymentTypeId = searchDto.paymentTypeId;
+    }
+
+    if (searchDto.senderId) {
+      whereClause.senderId = searchDto.senderId;
+    }
+
+    // Amount range filtering
+    if (
+      searchDto.minAmount !== undefined ||
+      searchDto.maxAmount !== undefined
+    ) {
+      whereClause.amount = {};
+      if (searchDto.minAmount !== undefined) {
+        whereClause.amount.gte = searchDto.minAmount;
+      }
+      if (searchDto.maxAmount !== undefined) {
+        whereClause.amount.lte = searchDto.maxAmount;
+      }
+    }
+
+    // Date range filtering (created date)
+    if (searchDto.fromDate || searchDto.toDate) {
+      whereClause.createdAt = {};
+      if (searchDto.fromDate) {
+        whereClause.createdAt.gte = new Date(searchDto.fromDate);
+      }
+      if (searchDto.toDate) {
+        whereClause.createdAt.lte = new Date(searchDto.toDate);
+      }
+    }
+
+    // Date range filtering (paid date)
+    if (searchDto.paidFromDate || searchDto.paidToDate) {
+      whereClause.paidAt = {};
+      if (searchDto.paidFromDate) {
+        whereClause.paidAt.gte = new Date(searchDto.paidFromDate);
+      }
+      if (searchDto.paidToDate) {
+        whereClause.paidAt.lte = new Date(searchDto.paidToDate);
+      }
+    }
+
+    // Build sort clause
+    const orderBy: any = {};
+    orderBy[sortBy] = sortOrder;
+
+    const [payments, total] = await Promise.all([
+      this.prismaService.payment.findMany({
+        where: whereClause,
+        include: {
+          paymentType: true,
+          sender: {
+            select: {
+              id: true,
+              firstName: true,
+              lastName: true,
+              phone: true,
+            },
+          },
+          cooperative: {
+            select: {
+              id: true,
+              name: true,
+              code: true,
+            },
+          },
+        },
+        skip,
+        take: limit,
+        orderBy,
+      }),
+      this.prismaService.payment.count({ where: whereClause }),
+    ]);
+
+    const data = payments.map((payment) => this.mapToResponseDto(payment));
+
+    return new PaginatedResponseDto(data, total, page, limit);
   }
 
   private async validatePaymentAmount(

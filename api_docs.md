@@ -557,6 +557,50 @@ Some endpoints are public and don't require authentication:
 
 - `page`, `limit`, `search` (same as users)
 
+#### Search Cooperatives
+
+**GET** `/cooperatives/search`
+
+**Description:** Advanced search for cooperatives with comprehensive filtering options including status, date range, and detailed search criteria.
+
+**Query Parameters:**
+
+- `search` (optional): Search by cooperative name, code, description, or address
+- `status` (optional): Filter by cooperative status (`ACTIVE`, `INACTIVE`, `SUSPENDED`, `PENDING_APPROVAL`)
+- `fromDate` (optional): Filter cooperatives created from this date
+- `toDate` (optional): Filter cooperatives created until this date
+- `sortBy` (optional): Sort field (`createdAt`, `name`, `code`, `status`)
+- `sortOrder` (optional): Sort order (`asc`, `desc`)
+- `page`, `limit` (pagination)
+
+**Response:**
+
+```json
+{
+  "data": [
+    {
+      "id": "507f1f77bcf86cd799439012",
+      "name": "Nyamirambo Housing Cooperative",
+      "code": "NHC001",
+      "description": "A housing cooperative in Nyamirambo",
+      "status": "ACTIVE",
+      "address": "Nyamirambo, Kigali, Rwanda",
+      "phone": "+250788111222",
+      "email": "admin@nyamirambo.coop",
+      "userCount": 45,
+      "createdAt": "2025-01-15T10:00:00Z",
+      "updatedAt": "2025-01-15T10:00:00Z"
+    }
+  ],
+  "meta": {
+    "total": 25,
+    "page": 1,
+    "limit": 10,
+    "totalPages": 3
+  }
+}
+```
+
 #### Get Cooperative by ID
 
 **GET** `/cooperatives/:id`
@@ -620,6 +664,60 @@ curl -X GET "https://api.copay.com/payment-types?cooperativeId=507f1f77bcf86cd79
 
 Optimized endpoint for USSD and mobile apps.
 
+#### Search Payment Types
+
+**GET** `/payment-types/search` 🔒 *Admin Only*
+
+**Required Roles:** `ORGANIZATION_ADMIN`, `SUPER_ADMIN`
+
+**Description:** Advanced search for payment types with comprehensive filtering options including cooperative, active status, amount type, and recurring settings.
+
+**Query Parameters:**
+
+- `search` (optional): Search by payment type name or description
+- `cooperativeId` (optional): Filter by cooperative ID (super admin can search across cooperatives)
+- `isActive` (optional): Filter by active status (`true`, `false`)
+- `isRecurring` (optional): Filter by recurring payment types (`true`, `false`)
+- `amountType` (optional): Filter by payment amount type (`FIXED`, `PARTIAL_ALLOWED`, `FLEXIBLE`)
+- `fromDate` (optional): Filter payment types created from this date
+- `toDate` (optional): Filter payment types created until this date
+- `sortBy` (optional): Sort field (`createdAt`, `name`, `amount`, `dueDay`)
+- `sortOrder` (optional): Sort order (`asc`, `desc`)
+- `page`, `limit` (pagination)
+
+**Response:**
+
+```json
+{
+  "data": [
+    {
+      "id": "507f1f77bcf86cd799439011",
+      "name": "Monthly Rent",
+      "description": "Monthly rental payment",
+      "amount": 50000,
+      "amountType": "FIXED",
+      "isActive": true,
+      "allowPartialPayment": false,
+      "isRecurring": true,
+      "dueDay": 1,
+      "cooperative": {
+        "id": "507f1f77bcf86cd799439012",
+        "name": "Nyamirambo Housing Cooperative",
+        "code": "NHC001"
+      },
+      "createdAt": "2024-01-15T10:30:00Z",
+      "updatedAt": "2024-01-15T10:30:00Z"
+    }
+  ],
+  "meta": {
+    "total": 15,
+    "page": 1,
+    "limit": 10,
+    "totalPages": 2
+  }
+}
+```
+
 ```bash
 curl -X GET "https://api.copay.com/payment-types/active?cooperativeId=507f1f77bcf86cd799439012"
 ```
@@ -650,6 +748,83 @@ curl -X GET "https://api.copay.com/payment-types/507f1f77bcf86cd799439011?cooper
   "isRecurring": true,
   "isActive": true
 }
+```
+
+---
+
+### Reminders
+
+#### Search Reminders
+
+**GET** `/reminders/search` 🔒 *Requires Auth*
+
+**Required Roles:** `TENANT`, `ORGANIZATION_ADMIN`, `SUPER_ADMIN`
+
+**Description:** Advanced search for reminders with comprehensive filtering options including type, status, payment type, and date ranges.
+
+**Query Parameters:**
+
+- `search` (optional): Search by reminder title, description, or notes
+- `type` (optional): Filter by reminder type (`PAYMENT_DUE`, `CUSTOM`, `DEADLINE`)
+- `status` (optional): Filter by reminder status (`ACTIVE`, `COMPLETED`, `CANCELLED`)
+- `cooperativeId` (optional): Filter by cooperative ID (admin users only)
+- `userId` (optional): Filter by user ID (admin users only)
+- `paymentTypeId` (optional): Filter by payment type ID
+- `isRecurring` (optional): Filter recurring reminders only (`true`, `false`)
+- `fromDate` (optional): Filter reminders created from this date
+- `toDate` (optional): Filter reminders created until this date
+- `reminderFromDate` (optional): Filter reminders scheduled from this date
+- `reminderToDate` (optional): Filter reminders scheduled until this date
+- `sortBy` (optional): Sort field (`nextTrigger`, `reminderDate`, `createdAt`)
+- `sortOrder` (optional): Sort order (`asc`, `desc`)
+- `page`, `limit` (pagination)
+
+**Response:**
+
+```json
+{
+  "data": [
+    {
+      "id": "507f1f77bcf86cd799439017",
+      "title": "Monthly Fee Reminder",
+      "description": "Don't forget your monthly membership fee",
+      "type": "PAYMENT_DUE",
+      "status": "ACTIVE",
+      "userId": "507f1f77bcf86cd799439013",
+      "cooperativeId": "507f1f77bcf86cd799439011",
+      "paymentTypeId": "507f1f77bcf86cd799439016",
+      "paymentType": {
+        "id": "507f1f77bcf86cd799439016",
+        "name": "Monthly Membership Fee",
+        "amount": 5000,
+        "description": "Monthly membership dues"
+      },
+      "reminderDate": "2025-11-15T09:00:00Z",
+      "isRecurring": true,
+      "recurringPattern": "MONTHLY",
+      "notificationTypes": ["SMS", "EMAIL"],
+      "advanceNoticeDays": 3,
+      "customAmount": null,
+      "notes": null,
+      "lastTriggered": null,
+      "nextTrigger": "2025-11-12T09:00:00Z",
+      "triggerCount": 0,
+      "createdAt": "2025-01-01T10:00:00Z",
+      "updatedAt": "2025-01-01T10:00:00Z"
+    }
+  ],
+  "meta": {
+    "total": 1,
+    "page": 1,
+    "limit": 10,
+    "totalPages": 1
+  }
+}
+```
+
+```bash
+curl -X GET "https://api.copay.com/reminders/search?type=PAYMENT_DUE&status=ACTIVE&isRecurring=true" \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"
 ```
 
 ---
@@ -714,6 +889,63 @@ curl -X GET "https://api.copay.com/payment-types/507f1f77bcf86cd799439011?cooper
 - `page`, `limit` (pagination)
 - `status` (filter): `PENDING`, `PROCESSING`, `COMPLETED`, `FAILED`, `CANCELLED`, `TIMEOUT`
 - `paymentMethod` (filter)
+
+#### Search Payments
+
+**GET** `/payments/search`
+
+**Description:** Advanced search for payments with comprehensive filtering options including amount range, dates, status, payment methods, etc. Role-based access applies.
+
+**Query Parameters:**
+
+- `search` (optional): Search by payment description or reference
+- `status` (optional): Filter by payment status (`PENDING`, `PROCESSING`, `COMPLETED`, `FAILED`, `CANCELLED`, `REFUNDED`)
+- `paymentMethod` (optional): Filter by payment method (`MOBILE_MONEY_MTN`, `MOBILE_MONEY_AIRTEL`, `BANK_BK`, `BANK_IM`, `BANK_ECOBANK`)
+- `cooperativeId` (optional): Filter by cooperative ID (admin only)
+- `paymentTypeId` (optional): Filter by payment type ID
+- `senderId` (optional): Filter by sender user ID (admin only)
+- `minAmount` (optional): Minimum payment amount
+- `maxAmount` (optional): Maximum payment amount
+- `fromDate` (optional): Filter payments created from this date
+- `toDate` (optional): Filter payments created until this date
+- `paidFromDate` (optional): Filter payments paid from this date
+- `paidToDate` (optional): Filter payments paid until this date
+- `sortBy` (optional): Sort field (`createdAt`, `amount`, `paidAt`, `dueDate`)
+- `sortOrder` (optional): Sort order (`asc`, `desc`)
+- `page`, `limit` (pagination)
+
+**Response:**
+
+```json
+{
+  "data": [
+    {
+      "id": "67890abcdef12345",
+      "amount": 50000,
+      "status": "COMPLETED",
+      "paymentMethod": "MOBILE_MONEY_MTN",
+      "description": "Monthly rent payment for October 2025",
+      "createdAt": "2025-10-16T10:30:00Z",
+      "paidAt": "2025-10-16T10:32:00Z",
+      "paymentType": {
+        "id": "507f1f77bcf86cd799439011",
+        "name": "Monthly Rent"
+      },
+      "sender": {
+        "id": "507f1f77bcf86cd799439014",
+        "firstName": "John",
+        "lastName": "Doe"
+      }
+    }
+  ],
+  "meta": {
+    "total": 150,
+    "page": 1,
+    "limit": 10,
+    "totalPages": 15
+  }
+}
+```
 
 ---
 

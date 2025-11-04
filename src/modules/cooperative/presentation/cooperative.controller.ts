@@ -17,6 +17,7 @@ import {
 import { CooperativeService } from '../application/cooperative.service';
 import { CreateCooperativeDto } from './dto/create-cooperative.dto';
 import { CooperativeResponseDto } from './dto/cooperative-response.dto';
+import { CooperativeSearchDto } from './dto/cooperative-search.dto';
 import { PaginationDto } from '../../../shared/dto/pagination.dto';
 import { PaginatedResponseDto } from '../../../shared/dto/paginated-response.dto';
 import { JwtAuthGuard } from '../../../shared/guards/jwt-auth.guard';
@@ -45,6 +46,28 @@ export class CooperativeController {
     @Body() createCooperativeDto: CreateCooperativeDto,
   ): Promise<CooperativeResponseDto> {
     return this.cooperativeService.create(createCooperativeDto);
+  }
+
+  @Get('search')
+  @ApiOperation({
+    summary: 'Search cooperatives with advanced filtering',
+    description:
+      'Search cooperatives with comprehensive filtering options including name, code, status, and date range. Role-based access applies.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Cooperatives search results retrieved successfully',
+    type: PaginatedResponseDto<CooperativeResponseDto>,
+  })
+  async searchCooperatives(
+    @Query() searchDto: CooperativeSearchDto,
+    @CurrentUser() currentUser: AuthenticatedUser,
+  ): Promise<PaginatedResponseDto<CooperativeResponseDto>> {
+    return this.cooperativeService.searchCooperatives(
+      searchDto,
+      currentUser.role as UserRole,
+      currentUser.cooperativeId,
+    );
   }
 
   @Get()

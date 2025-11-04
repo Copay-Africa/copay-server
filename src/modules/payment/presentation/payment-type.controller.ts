@@ -18,6 +18,7 @@ import {
 import { PaymentTypeService } from '../application/payment-type.service';
 import { CreatePaymentTypeDto } from './dto/create-payment-type.dto';
 import { PaymentTypeResponseDto } from './dto/payment-type-response.dto';
+import { PaymentTypeSearchDto } from './dto/payment-type-search.dto';
 import { PaginationDto } from '../../../shared/dto/pagination.dto';
 import { PaginatedResponseDto } from '../../../shared/dto/paginated-response.dto';
 import { JwtAuthGuard } from '../../../shared/guards/jwt-auth.guard';
@@ -51,6 +52,26 @@ export class PaymentTypeController {
       currentUser.cooperativeId!,
       currentUser.role as UserRole,
     );
+  }
+
+  @Get('search')
+  @Public()
+  @ApiOperation({
+    summary: 'Search payment types',
+    description: 'Search payment types with advanced filtering options',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Payment types found successfully',
+    type: PaginatedResponseDto<PaymentTypeResponseDto>,
+  })
+  async searchPaymentTypes(
+    @Query() searchDto: PaymentTypeSearchDto,
+  ): Promise<PaginatedResponseDto<PaymentTypeResponseDto>> {
+    if (!searchDto.cooperativeId) {
+      throw new BadRequestException('Cooperative ID is required');
+    }
+    return this.paymentTypeService.searchPaymentTypes(searchDto);
   }
 
   @Get()

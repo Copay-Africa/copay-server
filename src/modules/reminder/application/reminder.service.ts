@@ -9,6 +9,7 @@ import { CreateReminderDto } from '../presentation/dto/create-reminder.dto';
 import { UpdateReminderDto } from '../presentation/dto/update-reminder.dto';
 import { ReminderResponseDto } from '../presentation/dto/reminder-response.dto';
 import { ReminderFilterDto } from '../presentation/dto/reminder-filter.dto';
+import { ReminderSearchDto } from '../presentation/dto/reminder-search.dto';
 import { PaginatedResponseDto } from '../../../shared/dto/paginated-response.dto';
 import { ReminderStatus, UserRole } from '@prisma/client';
 
@@ -335,6 +336,115 @@ export class ReminderService {
     await this.prismaService.reminder.delete({
       where: { id },
     });
+  }
+
+  async searchReminders(
+    searchDto: ReminderSearchDto,
+    userId: string,
+    cooperativeId: string,
+    userRole: UserRole,
+  ): Promise<PaginatedResponseDto<ReminderResponseDto>> {
+    const {
+      page = 1,
+      limit = 10,
+      sortBy = 'nextTrigger',
+      sortOrder = 'asc',
+    } = searchDto;
+    const skip = (page - 1) * limit;
+
+    // Build where clause based on user role and search criteria
+    const whereClause: Record<string, any> = {};
+
+    // Role-based access control
+    if (userRole === UserRole.TENANT) {
+      whereClause.userId = userId;
+    } else if (userRole === UserRole.ORGANIZATION_ADMIN) {
+      whereClause.cooperativeId = cooperativeId;
+    } else if (userRole === UserRole.SUPER_ADMIN) {
+      // Super admin can search across all cooperatives
+      if (searchDto.cooperativeId) {
+        whereClause.cooperativeId = searchDto.cooperativeId;
+      }
+    }
+
+    // Apply search filters
+    if (searchDto.search) {
+      whereClause.OR = [
+        { title: { contains: searchDto.search, mode: 'insensitive' } },
+        { description: { contains: searchDto.search, mode: 'insensitive' } },
+        { notes: { contains: searchDto.search, mode: 'insensitive' } },
+      ];
+    }
+
+    if (searchDto.type) {
+      whereClause.type = searchDto.type;
+    }
+
+    if (searchDto.status) {
+      whereClause.status = searchDto.status;
+    }
+
+    if (searchDto.paymentTypeId) {
+      whereClause.paymentTypeId = searchDto.paymentTypeId;
+    }
+
+    if (searchDto.userId) {
+      whereClause.userId = searchDto.userId;
+    }
+
+    if (searchDto.isRecurring !== undefined) {
+      whereClause.isRecurring = searchDto.isRecurring;
+    }
+
+    // Date range filtering (created date)
+    if (searchDto.fromDate || searchDto.toDate) {
+      whereClause.createdAt = {};
+      if (searchDto.fromDate) {
+        whereClause.createdAt.gte = new Date(searchDto.fromDate);
+      }
+      if (searchDto.toDate) {
+        whereClause.createdAt.lte = new Date(searchDto.toDate);
+      }
+    }
+
+    // Reminder scheduled date filtering
+    if (searchDto.reminderFromDate || searchDto.reminderToDate) {
+      whereClause.reminderDate = {};
+      if (searchDto.reminderFromDate) {
+        whereClause.reminderDate.gte = new Date(searchDto.reminderFromDate);
+      }
+      if (searchDto.reminderToDate) {
+        whereClause.reminderDate.lte = new Date(searchDto.reminderToDate);
+      }
+    }
+
+    // Build sort clause
+    const orderBy: Record<string, any> = {};
+    orderBy[sortBy] = sortOrder;
+
+    const [reminders, total] = await Promise.all([
+      this.prismaService.reminder.findMany({
+        where: whereClause,
+        include: {
+          paymentType: {
+            select: {
+              id: true,
+              name: true,
+              amount: true,
+              description: true,
+            },
+          },
+        },
+        skip,
+        take: limit,
+        orderBy,
+      }),
+      this.prismaService.reminder.count({ where: whereClause }),
+    ]);
+
+    const data = reminders.map((reminder) => this.mapToResponseDto(reminder));
+
+    return new PaginatedResponseDto(data, total, page, limit);
   }
 
   // Get reminders that are due for processing

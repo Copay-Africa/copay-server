@@ -8,6 +8,7 @@ import {
 import { PrismaService } from '../../../prisma/prisma.service';
 import { CreatePaymentTypeDto } from '../presentation/dto/create-payment-type.dto';
 import { PaymentTypeResponseDto } from '../presentation/dto/payment-type-response.dto';
+import { PaymentTypeSearchDto } from '../presentation/dto/payment-type-search.dto';
 import { PaginationDto } from '../../../shared/dto/pagination.dto';
 import { PaginatedResponseDto } from '../../../shared/dto/paginated-response.dto';
 import { UserRole } from '@prisma/client';
@@ -273,6 +274,74 @@ export class PaymentTypeService {
     }
 
     return this.mapToResponseDto(paymentType);
+  }
+
+  async searchPaymentTypes(
+    searchDto: PaymentTypeSearchDto,
+  ): Promise<PaginatedResponseDto<PaymentTypeResponseDto>> {
+    const {
+      page = 1,
+      limit = 10,
+      sortBy = 'createdAt',
+      sortOrder = 'desc',
+    } = searchDto;
+    const skip = (page - 1) * limit;
+
+    // Build where clause based on search criteria
+    const whereClause: Record<string, any> = {
+      cooperativeId: searchDto.cooperativeId,
+    };
+
+    // Apply search filters
+    if (searchDto.search) {
+      whereClause.OR = [
+        { name: { contains: searchDto.search, mode: 'insensitive' } },
+        { description: { contains: searchDto.search, mode: 'insensitive' } },
+      ];
+    }
+
+    if (searchDto.isActive !== undefined) {
+      whereClause.isActive = searchDto.isActive;
+    }
+
+    if (searchDto.amountType) {
+      whereClause.amountType = searchDto.amountType;
+    }
+
+    if (searchDto.isRecurring !== undefined) {
+      whereClause.isRecurring = searchDto.isRecurring;
+    }
+
+    // Date range filtering
+    if (searchDto.fromDate || searchDto.toDate) {
+      whereClause.createdAt = {};
+      if (searchDto.fromDate) {
+        whereClause.createdAt.gte = new Date(searchDto.fromDate);
+      }
+      if (searchDto.toDate) {
+        whereClause.createdAt.lte = new Date(searchDto.toDate);
+      }
+    }
+
+    // Build sort clause
+    const orderBy: Record<string, any> = {};
+    orderBy[sortBy] = sortOrder;
+
+    const [paymentTypes, total] = await Promise.all([
+      this.prismaService.paymentType.findMany({
+        where: whereClause,
+        skip,
+        take: limit,
+        orderBy,
+      }),
+      this.prismaService.paymentType.count({ where: whereClause }),
+    ]);
+
+    const data = paymentTypes.map((paymentType) =>
+      this.mapToResponseDto(paymentType),
+    );
+
+    return new PaginatedResponseDto(data, total, page, limit);
   }
 
   private async clearPaymentTypesCache(cooperativeId: string): Promise<void> {

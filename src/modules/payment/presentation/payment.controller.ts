@@ -16,6 +16,7 @@ import {
 import { PaymentService } from '../application/payment.service';
 import { InitiatePaymentDto } from './dto/initiate-payment.dto';
 import { PaymentResponseDto } from './dto/payment-response.dto';
+import { PaymentSearchDto } from './dto/payment-search.dto';
 import { PaginationDto } from '../../../shared/dto/pagination.dto';
 import { PaginatedResponseDto } from '../../../shared/dto/paginated-response.dto';
 import { JwtAuthGuard } from '../../../shared/guards/jwt-auth.guard';
@@ -73,6 +74,29 @@ export class PaymentController {
       currentUser.id,
       currentUser.cooperativeId!,
       paginationDto,
+      currentUser.role as UserRole,
+    );
+  }
+
+  @Get('search')
+  @ApiOperation({
+    summary: 'Search payments with advanced filters',
+    description:
+      'Search payments with comprehensive filtering options including amount range, dates, status, payment methods, etc. Role-based access applies.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Payments search results retrieved successfully',
+    type: PaginatedResponseDto<PaymentResponseDto>,
+  })
+  async searchPayments(
+    @Query() searchDto: PaymentSearchDto,
+    @CurrentUser() currentUser: AuthenticatedUser,
+  ): Promise<PaginatedResponseDto<PaymentResponseDto>> {
+    return this.paymentService.searchPayments(
+      searchDto,
+      currentUser.id,
+      currentUser.cooperativeId!,
       currentUser.role as UserRole,
     );
   }

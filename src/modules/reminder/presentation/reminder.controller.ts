@@ -20,6 +20,7 @@ import { CreateReminderDto } from './dto/create-reminder.dto';
 import { UpdateReminderDto } from './dto/update-reminder.dto';
 import { ReminderResponseDto } from './dto/reminder-response.dto';
 import { ReminderFilterDto } from './dto/reminder-filter.dto';
+import { ReminderSearchDto } from './dto/reminder-search.dto';
 import { PaginatedResponseDto } from '../../../shared/dto/paginated-response.dto';
 import { JwtAuthGuard } from '../../../shared/guards/jwt-auth.guard';
 import { RolesGuard } from '../../../shared/guards/roles.guard';
@@ -54,6 +55,29 @@ export class ReminderController {
       createReminderDto,
       currentUser.id,
       currentUser.cooperativeId,
+    );
+  }
+
+  @Get('search')
+  @Roles('TENANT', 'ORGANIZATION_ADMIN', 'SUPER_ADMIN')
+  @ApiOperation({
+    summary: 'Search reminders',
+    description: 'Search reminders with advanced filtering options',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Reminders found successfully',
+    type: PaginatedResponseDto<ReminderResponseDto>,
+  })
+  async searchReminders(
+    @Query() searchDto: ReminderSearchDto,
+    @CurrentUser() currentUser: AuthenticatedUser,
+  ): Promise<PaginatedResponseDto<ReminderResponseDto>> {
+    return this.reminderService.searchReminders(
+      searchDto,
+      currentUser.id,
+      currentUser.cooperativeId || '',
+      currentUser.role as UserRole,
     );
   }
 

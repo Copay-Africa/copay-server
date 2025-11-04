@@ -7,6 +7,7 @@ import {
 import { PrismaService } from '../../../prisma/prisma.service';
 import { CreateCooperativeDto } from '../presentation/dto/create-cooperative.dto';
 import { CooperativeResponseDto } from '../presentation/dto/cooperative-response.dto';
+import { CooperativeSearchDto } from '../presentation/dto/cooperative-search.dto';
 import { PaginationDto } from '../../../shared/dto/pagination.dto';
 import { PaginatedResponseDto } from '../../../shared/dto/paginated-response.dto';
 import { CooperativeStatus, UserRole } from '@prisma/client';
@@ -68,6 +69,93 @@ export class CooperativeService {
         { description: { contains: search, mode: 'insensitive' } },
         { address: { contains: search, mode: 'insensitive' } },
       ];
+    }
+
+    // Build order by clause
+    const orderBy: any = {};
+    if (sortBy) {
+      orderBy[sortBy] = sortOrder;
+    } else {
+      orderBy.createdAt = 'desc';
+    }
+
+    // Execute queries
+    const [cooperatives, total] = await Promise.all([
+      this.prismaService.cooperative.findMany({
+        where,
+        orderBy,
+        skip,
+        take: limit,
+        include: {
+          _count: {
+            select: { users: true },
+          },
+        },
+      }),
+      this.prismaService.cooperative.count({ where }),
+    ]);
+
+    const cooperativeResponses = cooperatives.map((coop) =>
+      this.mapToResponseDto(coop),
+    );
+
+    return new PaginatedResponseDto(
+      cooperativeResponses,
+      total,
+      page || 1,
+      limit || 10,
+    );
+  }
+
+  async searchCooperatives(
+    searchDto: CooperativeSearchDto,
+    currentUserRole?: UserRole,
+    currentCooperativeId?: string,
+  ): Promise<PaginatedResponseDto<CooperativeResponseDto>> {
+    const {
+      page,
+      limit,
+      search,
+      sortBy,
+      sortOrder,
+      skip,
+      status,
+      fromDate,
+      toDate,
+    } = searchDto;
+
+    // Build where clause based on user role and search
+    const where: any = {};
+
+    // Apply tenant isolation for non-super admins
+    if (currentUserRole !== UserRole.SUPER_ADMIN && currentCooperativeId) {
+      where.id = currentCooperativeId;
+    }
+
+    // Add search filter
+    if (search) {
+      where.OR = [
+        { name: { contains: search, mode: 'insensitive' } },
+        { code: { contains: search, mode: 'insensitive' } },
+        { description: { contains: search, mode: 'insensitive' } },
+        { address: { contains: search, mode: 'insensitive' } },
+      ];
+    }
+
+    // Add status filter
+    if (status) {
+      where.status = status;
+    }
+
+    // Add date range filters
+    if (fromDate || toDate) {
+      where.createdAt = {};
+      if (fromDate) {
+        where.createdAt.gte = new Date(fromDate);
+      }
+      if (toDate) {
+        where.createdAt.lte = new Date(toDate);
+      }
     }
 
     // Build order by clause

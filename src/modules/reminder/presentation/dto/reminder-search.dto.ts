@@ -1,17 +1,17 @@
 import {
   IsOptional,
   IsEnum,
-  IsDateString,
   IsString,
-  IsBoolean,
+  IsDateString,
   IsMongoId,
+  IsBoolean,
 } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { ReminderType, ReminderStatus } from '@prisma/client';
 import { PaginationDto } from '../../../../shared/dto/pagination.dto';
 import { Transform } from 'class-transformer';
 
-export class ReminderFilterDto extends PaginationDto {
+export class ReminderSearchDto extends PaginationDto {
   @ApiPropertyOptional({
     description: 'Filter by reminder type',
     enum: ReminderType,
@@ -40,7 +40,7 @@ export class ReminderFilterDto extends PaginationDto {
   cooperativeId?: string;
 
   @ApiPropertyOptional({
-    description: 'Filter by user ID (for admin queries)',
+    description: 'Filter by user ID',
     example: '507f1f77bcf86cd799439013',
   })
   @IsOptional()
@@ -58,23 +58,7 @@ export class ReminderFilterDto extends PaginationDto {
   paymentTypeId?: string;
 
   @ApiPropertyOptional({
-    description: 'Filter reminders from this date (ISO 8601)',
-    example: '2025-11-01T00:00:00Z',
-  })
-  @IsOptional()
-  @IsDateString()
-  fromDate?: string;
-
-  @ApiPropertyOptional({
-    description: 'Filter reminders to this date (ISO 8601)',
-    example: '2025-11-30T23:59:59Z',
-  })
-  @IsOptional()
-  @IsDateString()
-  toDate?: string;
-
-  @ApiPropertyOptional({
-    description: 'Filter only recurring reminders',
+    description: 'Filter by recurring reminders only',
     example: true,
   })
   @IsOptional()
@@ -87,16 +71,34 @@ export class ReminderFilterDto extends PaginationDto {
   isRecurring?: boolean;
 
   @ApiPropertyOptional({
-    description:
-      'Filter only due reminders (reminders that should trigger now or in the past)',
-    example: true,
+    description: 'Filter reminders created from this date',
+    example: '2025-10-01T00:00:00Z',
   })
   @IsOptional()
-  @IsBoolean()
-  @Transform(({ value }) => {
-    if (value === 'true') return true;
-    if (value === 'false') return false;
-    return value as boolean;
+  @IsDateString()
+  fromDate?: string;
+
+  @ApiPropertyOptional({
+    description: 'Filter reminders created until this date',
+    example: '2025-10-31T23:59:59Z',
   })
-  isDue?: boolean;
+  @IsOptional()
+  @IsDateString()
+  toDate?: string;
+
+  @ApiPropertyOptional({
+    description: 'Filter reminders scheduled from this date',
+    example: '2025-11-01T00:00:00Z',
+  })
+  @IsOptional()
+  @IsDateString()
+  reminderFromDate?: string;
+
+  @ApiPropertyOptional({
+    description: 'Filter reminders scheduled until this date',
+    example: '2025-11-30T23:59:59Z',
+  })
+  @IsOptional()
+  @IsDateString()
+  reminderToDate?: string;
 }
