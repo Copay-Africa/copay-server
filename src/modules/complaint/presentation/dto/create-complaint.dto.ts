@@ -4,7 +4,7 @@ import {
   IsEnum,
   IsOptional,
   MaxLength,
-  IsUUID,
+  IsMongoId,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { ComplaintPriority } from '@prisma/client';
@@ -17,7 +17,7 @@ export class CreateComplaintDto {
   })
   @IsOptional()
   @IsString()
-  @IsUUID()
+  @IsMongoId()
   cooperativeId?: string;
 
   @ApiProperty({

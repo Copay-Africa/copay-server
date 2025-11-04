@@ -5,6 +5,7 @@ import {
   IsEnum,
   Length,
   Matches,
+  IsMongoId,
 } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { UserStatus } from '@prisma/client';
@@ -47,6 +48,7 @@ export class UpdateTenantDto {
   })
   @IsOptional()
   @IsString()
+  @IsMongoId()
   cooperativeId?: string;
 
   @ApiPropertyOptional({

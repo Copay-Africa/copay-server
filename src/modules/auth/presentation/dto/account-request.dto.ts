@@ -1,5 +1,11 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsString, IsNotEmpty, IsPhoneNumber, Length } from 'class-validator';
+import {
+  IsString,
+  IsNotEmpty,
+  IsPhoneNumber,
+  Length,
+  IsMongoId,
+} from 'class-validator';
 
 export class CreateAccountRequestDto {
   @ApiProperty({
@@ -25,6 +31,7 @@ export class CreateAccountRequestDto {
   })
   @IsString()
   @IsNotEmpty()
+  @IsMongoId()
   cooperativeId: string;
 
   @ApiProperty({
