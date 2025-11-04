@@ -181,7 +181,7 @@ export class AccountRequestController {
     );
   }
 
-  @Get('account-requests/stats')
+  @Get('stats')
   @Roles('SUPER_ADMIN', 'ORGANIZATION_ADMIN')
   @ApiOperation({ summary: 'Get account requests statistics' })
   @ApiResponse({

@@ -16,6 +16,8 @@ import { SmsModule } from './modules/sms/sms.module';
 import { ActivityModule } from './modules/activity/activity.module';
 import { ReminderModule } from './modules/reminder/reminder.module';
 import { ComplaintModule } from './modules/complaint/complaint.module';
+import { NotificationModule } from './modules/notification/notification.module';
+import { AnnouncementModule } from './modules/announcement/announcement.module';
 import { JwtAuthGuard } from './shared/guards/jwt-auth.guard';
 import { CacheConfigModule } from './config/cache.module';
 import {
@@ -86,6 +88,8 @@ import {
     ActivityModule,
     ReminderModule,
     ComplaintModule,
+    NotificationModule,
+    AnnouncementModule,
   ],
   controllers: [AppController, HealthController],
   providers: [

@@ -66,6 +66,15 @@ export class NotificationService {
     }
   }
 
+  async sendAnnouncementNotification(
+    notificationType: NotificationType,
+    contentData: { title: string; message: string },
+    user: any,
+    context: NotificationContext & { announcementId?: string },
+  ): Promise<void> {
+    await this.sendNotification(notificationType, contentData, user, context);
+  }
+
   private async sendNotification(
     type: NotificationType,
     contentData: any,

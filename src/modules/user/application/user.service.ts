@@ -625,6 +625,54 @@ export class UserService {
     };
   }
 
+  async getUserStats(): Promise<{
+    totalUsers: number;
+    totalTenants: number;
+    totalOrgAdmins: number;
+    totalSuperAdmins: number;
+    activeUsers: number;
+    inactiveUsers: number;
+    recentRegistrations: number;
+  }> {
+    try {
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+      const [
+        totalUsers,
+        totalTenants,
+        totalOrgAdmins,
+        totalSuperAdmins,
+        activeUsers,
+        inactiveUsers,
+        recentRegistrations,
+      ] = await Promise.all([
+        this.prismaService.user.count(),
+        this.prismaService.user.count({ where: { role: UserRole.TENANT } }),
+        this.prismaService.user.count({ where: { role: UserRole.ORGANIZATION_ADMIN } }),
+        this.prismaService.user.count({ where: { role: UserRole.SUPER_ADMIN } }),
+        this.prismaService.user.count({ where: { status: UserStatus.ACTIVE } }),
+        this.prismaService.user.count({ where: { status: UserStatus.INACTIVE } }),
+        this.prismaService.user.count({
+          where: { createdAt: { gte: thirtyDaysAgo } },
+        }),
+      ]);
+
+      return {
+        totalUsers,
+        totalTenants,
+        totalOrgAdmins,
+        totalSuperAdmins,
+        activeUsers,
+        inactiveUsers,
+        recentRegistrations,
+      };
+    } catch (error) {
+      console.error('Error getting user stats:', error);
+      throw new Error('Failed to get user statistics');
+    }
+  }
+
   private mapToResponseDto(user: any): UserResponseDto {
     return {
       id: user.id,

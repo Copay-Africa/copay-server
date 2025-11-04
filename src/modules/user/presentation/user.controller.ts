@@ -157,6 +157,25 @@ export class UserController {
     return this.userService.createTenant(createTenantDto);
   }
 
+  @Get('stats')
+  @Roles('SUPER_ADMIN')
+  @ApiOperation({ summary: 'Get general user statistics (Super Admin only)' })
+  @ApiResponse({
+    status: 200,
+    description: 'User statistics retrieved successfully',
+  })
+  async getUserStats(): Promise<{
+    totalUsers: number;
+    totalTenants: number;
+    totalOrgAdmins: number;
+    totalSuperAdmins: number;
+    activeUsers: number;
+    inactiveUsers: number;
+    recentRegistrations: number;
+  }> {
+    return this.userService.getUserStats();
+  }
+
   @Get('tenants')
   @Roles('SUPER_ADMIN')
   @ApiOperation({ summary: 'Get all tenants (Super Admin only)' })
