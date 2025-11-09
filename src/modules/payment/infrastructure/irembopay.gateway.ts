@@ -72,7 +72,7 @@ export class IrremboPayGateway {
 
   constructor(private configService: ConfigService) {
     this.baseUrl = this.configService.get('IREMBOPAY_BASE_URL') || '';
-    this.apiKey = this.configService.get('IREMBOPAY_API_KEY') || '';
+    this.apiKey = this.configService.get('IREMBOPAY_PUBLIC_KEY') || '';
     this.secretKey = this.configService.get('IREMBOPAY_SECRET_KEY') || '';
 
     // Log configuration status on startup
@@ -82,7 +82,7 @@ export class IrremboPayGateway {
   private validateAndLogConfiguration(): void {
     const missingConfig: string[] = [];
     if (!this.baseUrl) missingConfig.push('IREMBOPAY_BASE_URL');
-    if (!this.apiKey) missingConfig.push('IREMBOPAY_API_KEY');
+    if (!this.apiKey) missingConfig.push('IREMBOPAY_PUBLIC_KEY');
     if (!this.secretKey) missingConfig.push('IREMBOPAY_SECRET_KEY');
   }
 

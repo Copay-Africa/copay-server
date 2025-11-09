@@ -231,7 +231,7 @@ export class PaymentService {
         where: { id: payment.id },
         data: {
           paymentReference: gatewayResponse.gatewayReference || payment.id,
-          invoiceNumber: gatewayResponse.gatewayReference, // Store invoice number
+          invoiceNumber: gatewayResponse.success ? gatewayResponse.gatewayReference : null, // Store invoice number only on success
           status: gatewayResponse.success
             ? PaymentStatus.PENDING
             : PaymentStatus.FAILED,
@@ -279,7 +279,7 @@ export class PaymentService {
         gatewayResponse.gatewayTransactionId;
 
       // Ensure invoice number is included in response
-      if (gatewayResponse.gatewayReference) {
+      if (gatewayResponse.success && gatewayResponse.gatewayReference) {
         (responseDto as any).invoiceNumber = gatewayResponse.gatewayReference;
       }
 
