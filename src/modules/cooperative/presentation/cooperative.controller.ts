@@ -49,6 +49,7 @@ export class CooperativeController {
   }
 
   @Get('search')
+  @Roles(UserRole.ORGANIZATION_ADMIN, UserRole.SUPER_ADMIN)
   @ApiOperation({
     summary: 'Search cooperatives with advanced filtering',
     description:

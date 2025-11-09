@@ -882,126 +882,148 @@ export class PaymentService {
     userCooperativeId: string,
     userRole: UserRole,
   ): Promise<PaginatedResponseDto<PaymentResponseDto>> {
-    const {
-      page = 1,
-      limit = 10,
-      sortBy = 'createdAt',
-      sortOrder = 'desc',
-    } = searchDto;
-    const skip = (page - 1) * limit;
-
-    // Build where clause based on user role and search criteria
-    const whereClause: any = {};
-
-    // Role-based access control
-    if (userRole === UserRole.TENANT) {
-      whereClause.senderId = userId;
-    } else if (userRole === UserRole.ORGANIZATION_ADMIN) {
-      whereClause.cooperativeId = userCooperativeId;
-    } else if (userRole === UserRole.SUPER_ADMIN) {
-      // Super admin can search across all cooperatives
-      if (searchDto.cooperativeId) {
-        whereClause.cooperativeId = searchDto.cooperativeId;
+    try {
+      // Input validation
+      if (!userId) {
+        throw new BadRequestException('User ID is required');
       }
-    }
 
-    // Apply search filters
-    if (searchDto.search) {
-      whereClause.OR = [
-        { description: { contains: searchDto.search, mode: 'insensitive' } },
-        {
-          paymentReference: { contains: searchDto.search, mode: 'insensitive' },
-        },
-      ];
-    }
-
-    if (searchDto.status) {
-      whereClause.status = searchDto.status;
-    }
-
-    if (searchDto.paymentMethod) {
-      whereClause.paymentMethod = searchDto.paymentMethod;
-    }
-
-    if (searchDto.paymentTypeId) {
-      whereClause.paymentTypeId = searchDto.paymentTypeId;
-    }
-
-    if (searchDto.senderId) {
-      whereClause.senderId = searchDto.senderId;
-    }
-
-    // Amount range filtering
-    if (
-      searchDto.minAmount !== undefined ||
-      searchDto.maxAmount !== undefined
-    ) {
-      whereClause.amount = {};
-      if (searchDto.minAmount !== undefined) {
-        whereClause.amount.gte = searchDto.minAmount;
+      if (userRole === UserRole.ORGANIZATION_ADMIN && !userCooperativeId) {
+        throw new BadRequestException(
+          'Cooperative ID is required for organization admin',
+        );
       }
-      if (searchDto.maxAmount !== undefined) {
-        whereClause.amount.lte = searchDto.maxAmount;
-      }
-    }
 
-    // Date range filtering (created date)
-    if (searchDto.fromDate || searchDto.toDate) {
-      whereClause.createdAt = {};
-      if (searchDto.fromDate) {
-        whereClause.createdAt.gte = new Date(searchDto.fromDate);
-      }
-      if (searchDto.toDate) {
-        whereClause.createdAt.lte = new Date(searchDto.toDate);
-      }
-    }
+      const {
+        page = 1,
+        limit = 10,
+        sortBy = 'createdAt',
+        sortOrder = 'desc',
+      } = searchDto;
+      const skip = (page - 1) * limit;
 
-    // Date range filtering (paid date)
-    if (searchDto.paidFromDate || searchDto.paidToDate) {
-      whereClause.paidAt = {};
-      if (searchDto.paidFromDate) {
-        whereClause.paidAt.gte = new Date(searchDto.paidFromDate);
-      }
-      if (searchDto.paidToDate) {
-        whereClause.paidAt.lte = new Date(searchDto.paidToDate);
-      }
-    }
+      // Build where clause based on user role and search criteria
+      const whereClause: any = {};
 
-    // Build sort clause
-    const orderBy: any = {};
-    orderBy[sortBy] = sortOrder;
+      // Role-based access control
+      if (userRole === UserRole.TENANT) {
+        whereClause.senderId = userId;
+      } else if (userRole === UserRole.ORGANIZATION_ADMIN) {
+        whereClause.cooperativeId = userCooperativeId;
+      } else if (userRole === UserRole.SUPER_ADMIN) {
+        // Super admin can search across all cooperatives
+        if (searchDto.cooperativeId) {
+          whereClause.cooperativeId = searchDto.cooperativeId;
+        }
+      }
 
-    const [payments, total] = await Promise.all([
-      this.prismaService.payment.findMany({
-        where: whereClause,
-        include: {
-          paymentType: true,
-          sender: {
-            select: {
-              id: true,
-              firstName: true,
-              lastName: true,
-              phone: true,
+      // Apply search filters
+      if (searchDto.search) {
+        whereClause.OR = [
+          { description: { contains: searchDto.search, mode: 'insensitive' } },
+          {
+            paymentReference: {
+              contains: searchDto.search,
+              mode: 'insensitive',
             },
           },
-          cooperative: {
-            select: {
-              id: true,
-              name: true,
-              code: true,
+        ];
+      }
+
+      if (searchDto.status) {
+        whereClause.status = searchDto.status;
+      }
+
+      if (searchDto.paymentMethod) {
+        whereClause.paymentMethod = searchDto.paymentMethod;
+      }
+
+      if (searchDto.paymentTypeId) {
+        whereClause.paymentTypeId = searchDto.paymentTypeId;
+      }
+
+      if (searchDto.senderId) {
+        whereClause.senderId = searchDto.senderId;
+      }
+
+      // Amount range filtering
+      if (
+        searchDto.minAmount !== undefined ||
+        searchDto.maxAmount !== undefined
+      ) {
+        whereClause.amount = {};
+        if (searchDto.minAmount !== undefined) {
+          whereClause.amount.gte = searchDto.minAmount;
+        }
+        if (searchDto.maxAmount !== undefined) {
+          whereClause.amount.lte = searchDto.maxAmount;
+        }
+      }
+
+      // Date range filtering (created date)
+      if (searchDto.fromDate || searchDto.toDate) {
+        whereClause.createdAt = {};
+        if (searchDto.fromDate) {
+          whereClause.createdAt.gte = new Date(searchDto.fromDate);
+        }
+        if (searchDto.toDate) {
+          whereClause.createdAt.lte = new Date(searchDto.toDate);
+        }
+      }
+
+      // Date range filtering (paid date)
+      if (searchDto.paidFromDate || searchDto.paidToDate) {
+        whereClause.paidAt = {};
+        if (searchDto.paidFromDate) {
+          whereClause.paidAt.gte = new Date(searchDto.paidFromDate);
+        }
+        if (searchDto.paidToDate) {
+          whereClause.paidAt.lte = new Date(searchDto.paidToDate);
+        }
+      }
+
+      // Build sort clause
+      const orderBy: any = {};
+      orderBy[sortBy] = sortOrder;
+
+      const [payments, total] = await Promise.all([
+        this.prismaService.payment.findMany({
+          where: whereClause,
+          include: {
+            paymentType: true,
+            sender: {
+              select: {
+                id: true,
+                firstName: true,
+                lastName: true,
+                phone: true,
+              },
+            },
+            cooperative: {
+              select: {
+                id: true,
+                name: true,
+                code: true,
+              },
             },
           },
-        },
-        skip,
-        take: limit,
-        orderBy,
-      }),
-      this.prismaService.payment.count({ where: whereClause }),
-    ]);
+          skip,
+          take: limit,
+          orderBy,
+        }),
+        this.prismaService.payment.count({ where: whereClause }),
+      ]);
 
-    const data = payments.map((payment) => this.mapToResponseDto(payment));
+      const data = payments.map((payment) => this.mapToResponseDto(payment));
 
-    return new PaginatedResponseDto(data, total, page, limit);
+      return new PaginatedResponseDto(data, total, page, limit);
+    } catch (error) {
+      this.logger.error('Error searching payments:', error);
+      if (error instanceof BadRequestException) {
+        throw error;
+      }
+      throw new BadRequestException('Failed to search payments');
+    }
   }
 
   private async validatePaymentAmount(

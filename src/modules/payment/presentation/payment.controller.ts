@@ -6,6 +6,7 @@ import {
   Param,
   Query,
   UseGuards,
+  BadRequestException,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -79,6 +80,7 @@ export class PaymentController {
   }
 
   @Get('search')
+  @Roles(UserRole.TENANT, UserRole.ORGANIZATION_ADMIN, UserRole.SUPER_ADMIN)
   @ApiOperation({
     summary: 'Search payments with advanced filters',
     description:
@@ -93,10 +95,13 @@ export class PaymentController {
     @Query() searchDto: PaymentSearchDto,
     @CurrentUser() currentUser: AuthenticatedUser,
   ): Promise<PaginatedResponseDto<PaymentResponseDto>> {
+    if (!currentUser.cooperativeId) {
+      throw new BadRequestException('User cooperative ID is required');
+    }
     return this.paymentService.searchPayments(
       searchDto,
       currentUser.id,
-      currentUser.cooperativeId!,
+      currentUser.cooperativeId,
       currentUser.role as UserRole,
     );
   }
