@@ -1,6 +1,6 @@
-# Co-Pay Backend Server
+# Copay Backend Server
 
-A production-grade NestJS backend for the Cooperative Payment System (Co-Pay) built with Domain-Driven Design (DDD) and Clean Architecture principles.
+A production-grade NestJS backend for the Cooperative Payment System (Copay) built with Domain-Driven Design (DDD) and Clean Architecture principles.
 
 ## 🚀 Features
 

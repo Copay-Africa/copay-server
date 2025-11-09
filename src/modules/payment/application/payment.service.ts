@@ -137,7 +137,7 @@ export class PaymentService {
           initiatePaymentDto.description ||
           paymentType.description ||
           'Payment',
-        callbackUrl: `${process.env.API_BASE_URL || 'http://localhost:3000'}/api/v1/webhooks/payments/irembopay`,
+        callbackUrl: `${process.env.API_BASE_URL}/api/v1/webhooks/payments/irembopay`,
       };
 
       // Initiate payment with gateway
@@ -231,6 +231,7 @@ export class PaymentService {
         where: { id: payment.id },
         data: {
           paymentReference: gatewayResponse.gatewayReference || payment.id,
+          invoiceNumber: gatewayResponse.gatewayReference, // Store invoice number
           status: gatewayResponse.success
             ? PaymentStatus.PENDING
             : PaymentStatus.FAILED,
@@ -276,6 +277,11 @@ export class PaymentService {
       (responseDto as any).gatewayMessage = gatewayResponse.message;
       (responseDto as any).gatewayTransactionId =
         gatewayResponse.gatewayTransactionId;
+
+      // Ensure invoice number is included in response
+      if (gatewayResponse.gatewayReference) {
+        (responseDto as any).invoiceNumber = gatewayResponse.gatewayReference;
+      }
 
       return responseDto;
     } catch (error) {
@@ -1080,6 +1086,7 @@ export class PaymentService {
       paymentType: payment.paymentType,
       paymentMethod: payment.paymentMethod,
       paymentReference: payment.paymentReference,
+      invoiceNumber: payment.invoiceNumber,
       sender: payment.sender,
       cooperative: payment.cooperative,
       paidAt: payment.paidAt,

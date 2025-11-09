@@ -9,7 +9,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 /**
  * USSD Module
  *
- * Provides USSD functionality for the Co-Pay platform allowing tenants to:
+ * Provides USSD functionality for the Copay platform allowing tenants to:
  * - Make payments via USSD (*134#)
  * - Check payment history
  * - Get help and cooperative contact information

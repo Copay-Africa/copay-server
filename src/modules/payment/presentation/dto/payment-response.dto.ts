@@ -52,6 +52,12 @@ export class PaymentResponseDto {
   })
   paymentReference?: string;
 
+  @ApiPropertyOptional({
+    description: 'Invoice number from payment gateway',
+    example: 'INV_1729123456_abc123',
+  })
+  invoiceNumber?: string;
+
   @ApiProperty({
     description: 'Sender information',
   })

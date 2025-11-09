@@ -120,7 +120,7 @@ export class UssdController {
         summary: 'Welcome screen with main menu',
         value: {
           message:
-            'Welcome to Co-Pay, John!\n\n1. Make Payment\n2. My Payments\n3. Help\n\nEnter your choice:',
+            'Welcome to Copay, John!\n\n1. Make Payment\n2. My Payments\n3. Help\n\nEnter your choice:',
           sessionState: 'CON',
         },
       },
@@ -151,7 +151,7 @@ export class UssdController {
         summary: 'Successful payment completion',
         value: {
           message:
-            'Payment initiated successfully!\nAmount: 50000 RWF\nReference: pay_67890123456\nYou will receive a mobile money prompt shortly.\nThank you for using Co-Pay!',
+            'Payment initiated successfully!\nAmount: 50000 RWF\nReference: pay_67890123456\nYou will receive a mobile money prompt shortly.\nThank you for using Copay!',
           sessionState: 'END',
         },
       },
@@ -242,7 +242,7 @@ export class UssdController {
       properties: {
         status: { type: 'string', example: 'healthy' },
         timestamp: { type: 'string', example: '2025-10-16T10:30:00Z' },
-        service: { type: 'string', example: 'Co-Pay USSD Gateway' },
+        service: { type: 'string', example: 'Copay USSD Gateway' },
       },
     },
   })
@@ -250,7 +250,7 @@ export class UssdController {
     return {
       status: 'healthy',
       timestamp: new Date().toISOString(),
-      service: 'Co-Pay USSD Gateway',
+      service: 'Copay USSD Gateway',
     };
   }
 }

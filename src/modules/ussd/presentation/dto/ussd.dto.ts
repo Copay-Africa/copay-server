@@ -59,7 +59,7 @@ export class UssdRequestDto {
 export class UssdResponseDto {
   @ApiProperty({
     description: 'Response message to display to user',
-    example: 'Welcome to Co-Pay\n1. Make Payment\n2. My Payments\n3. Help',
+    example: 'Welcome to Copay\n1. Make Payment\n2. My Payments\n3. Help',
   })
   @IsString()
   @IsNotEmpty()

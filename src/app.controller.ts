@@ -17,7 +17,7 @@ export class AppController {
     schema: {
       type: 'object',
       properties: {
-        message: { type: 'string', example: 'Co-Pay API is running!' },
+        message: { type: 'string', example: 'Copay API is running!' },
         timestamp: { type: 'string', format: 'date-time' },
         version: { type: 'string', example: '1.0.0' },
       },

@@ -209,17 +209,16 @@ export class IrremboPayGateway {
         transactionId: request.reference,
         paymentItems: [
           {
-            // code: 'PC-def4cc3de8',
-            code: 'PC-5326314521',
+            code: `${process.env.IREMBOPAY_DEFAULT_PRODUCT_CODE}`,
             quantity: 1,
             unitAmount: request.amount,
           },
         ],
         paymentAccountIdentifier: this.getPaymentAccountIdentifier(),
-        description: request.description || 'Co-Pay payment',
+        description: request.description || 'Copay payment invoice on IremboPay',
         customer: {
           phoneNumber: this.extractPhoneNumber(request.paymentAccount),
-          name: 'Co-Pay User',
+          name: 'Copay User',
         },
         language: 'EN',
       };
@@ -279,7 +278,6 @@ export class IrremboPayGateway {
         };
       }
 
-      // Production-ready payload with additional validation
       const pushPayload = {
         accountIdentifier: formattedPhone,
         paymentProvider: iremboProvider,
@@ -297,6 +295,8 @@ export class IrremboPayGateway {
         },
       )) as IremboPayPushResponse['data'];
 
+      console.log(response);
+
       return {
         success: true,
         data: response,
@@ -311,7 +311,7 @@ export class IrremboPayGateway {
   }
 
   private isValidRwandaPhoneNumber(phoneNumber: string): boolean {
-    // Rwanda mobile number validation: 07XXXXXXXX (10 digits)
+    // validation: 07XXXXXXXX (10 digits)
     const rwandaMobileRegex = /^07[0-9]{8}$/;
     return rwandaMobileRegex.test(phoneNumber);
   }

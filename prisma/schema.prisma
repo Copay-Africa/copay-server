@@ -278,6 +278,7 @@ model Payment {
   // Payment method details
   paymentMethod    PaymentMethodType?
   paymentReference String? // External payment reference
+  invoiceNumber    String? // Invoice number from payment gateway
   idempotencyKey   String?            @unique // For preventing duplicate payments
 
   // Multi-tenancy

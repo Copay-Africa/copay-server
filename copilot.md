@@ -2,7 +2,7 @@
 
 Copay: is To simplify rent and related cooperative payments for tenants and managers through a unified, digital, and accessible payment solution.
 
-💎 The Solution: Co-Pay
+💎 The Solution: Copay
 
 A multi-channel digital payment platform for cooperatives to collect, track, and manage rent-related payments — all integrated with local payment gateways and IremboPay.
 
@@ -15,7 +15,7 @@ Build a production-grade NestJS backend following Domain-Driven Design (DDD) and
 
 Use TypeScript, Prisma ORM (MongoDB), JWT authentication, and follow NestJS best practices for modular design and scalability.
 
-Build a fast, optimized, and well-structured NestJS backend for a Cooperative Payment System (Co-Pay) that supports:
+Build a fast, optimized, and well-structured NestJS backend for a Cooperative Payment System (Copay) that supports:
 
 1. Web (Next.js frontend)
 2. Mobile (Flutter app)

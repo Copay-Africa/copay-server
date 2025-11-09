@@ -126,7 +126,7 @@ export class UssdService {
 
     if (!user) {
       return new UssdResponseDto(
-        'Phone number not registered with Co-Pay. Please contact your cooperative administrator.',
+        'Phone number not registered with Copay. Please contact your cooperative administrator.',
         'END',
       );
     }
@@ -143,7 +143,7 @@ export class UssdService {
     session.currentStep = 'main_menu';
 
     return new UssdResponseDto(
-      `Welcome to Co-Pay, ${user.firstName || 'User'}!\n\n1. Make Payment\n2. My Payments\n3. Help\n\nEnter your choice:`,
+      `Welcome to Copay, ${user.firstName || 'User'}!\n\n1. Make Payment\n2. My Payments\n3. Help\n\nEnter your choice:`,
       'CON',
     );
   }
@@ -493,7 +493,7 @@ export class UssdService {
             `Amount: ${paymentResult.amount} RWF\n` +
             `Method: ${paymentMethodName}\n` +
             `Reference: ${paymentResult.paymentReference || paymentResult.id}\n\n` +
-            `Thank you for using Co-Pay!`,
+            `Thank you for using Copay!`,
           'END',
         );
       } else if (paymentResult.status === PaymentStatus.PENDING) {
@@ -514,7 +514,7 @@ export class UssdService {
           message += `Payment reference: ${paymentResult.paymentReference || paymentResult.id}\n\n`;
         }
 
-        message += `Thank you for using Co-Pay!`;
+        message += `Thank you for using Copay!`;
 
         return new UssdResponseDto(message, 'END');
       } else {
@@ -610,7 +610,7 @@ export class UssdService {
             'For technical support, please contact:\n' +
             'Email: support@copay.rw\n' +
             'Phone: +250788000000\n\n' +
-            'Co-Pay - Making payments simple!',
+            'Copay - Making payments simple!',
           'END',
         );
       }

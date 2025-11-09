@@ -125,7 +125,7 @@ Some endpoints are public and don't require authentication:
 
 ```json
 {
-  "message": "Co-Pay API is running!",
+  "message": "Copay API is running!",
   "timestamp": "2025-11-04T10:30:00Z",
   "version": "1.0.0"
 }
@@ -201,7 +201,7 @@ Some endpoints are public and don't require authentication:
 
 ```json
 {
-  "message": "Welcome to Co-Pay, John!\n\n1. Make Payment\n2. My Payments\n3. Help\n\nEnter your choice:",
+  "message": "Welcome to Copay, John!\n\n1. Make Payment\n2. My Payments\n3. Help\n\nEnter your choice:",
   "sessionState": "CON"
 }
 ```
@@ -232,7 +232,7 @@ Some endpoints are public and don't require authentication:
 {
   "status": "healthy",
   "timestamp": "2025-11-04T10:30:00Z",
-  "service": "Co-Pay USSD Gateway"
+  "service": "Copay USSD Gateway"
 }
 ```
 
@@ -868,6 +868,7 @@ curl -X GET "https://api.copay.com/reminders/search?type=PAYMENT_DUE&status=ACTI
   "reference": "PAY_20251016_001",
   "gatewayTransactionId": "IREMBO_TXN_123456",
   "gatewayReference": "INV_1729123456_abc123",
+  "invoiceNumber": "INV_1729123456_abc123",
   "paymentUrl": "https://pay.irembo.gov.rw/invoice/INV_1729123456_abc123",
   "description": "Monthly rent payment for October 2025",
   "dueDate": "2025-11-01T00:00:00Z",

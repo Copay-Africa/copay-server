@@ -3,7 +3,7 @@ import { INestApplication } from '@nestjs/common';
 
 export function setupSwagger(app: INestApplication): void {
   const config = new DocumentBuilder()
-    .setTitle('Co-Pay API')
+    .setTitle('Copay API')
     .setDescription(
       'Cooperative Payment System API - A multi-tenant digital payment platform for cooperatives',
     )
@@ -40,7 +40,7 @@ export function setupSwagger(app: INestApplication): void {
       tagsSorter: 'alpha',
       operationsSorter: 'alpha',
     },
-    customSiteTitle: 'Co-Pay API Documentation',
+    customSiteTitle: 'Copay API Documentation',
     customCss: `
       .swagger-ui .topbar { display: none }
       .swagger-ui .info .title { color: #2c3e50; }

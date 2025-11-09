@@ -4,7 +4,7 @@ import { Injectable } from '@nestjs/common';
 export class AppService {
   getHealth(): object {
     return {
-      message: 'Co-Pay API is running!',
+      message: 'Copay API is running!',
       timestamp: new Date().toISOString(),
       version: '1.0.0',
     };
