@@ -1249,7 +1249,12 @@ export class PaymentService {
       );
 
       // Send notifications and SMS to the user
-      await this.sendPaymentNotifications(payment, webhookDto.status, amount);
+      await this.sendPaymentNotifications(
+        payment,
+        webhookDto.status,
+        amount,
+        webhookDto.gatewayData,
+      );
 
       // Log activity for payment status change
       if (webhookDto.status === PaymentStatus.COMPLETED) {
@@ -1277,6 +1282,7 @@ export class PaymentService {
     payment: any,
     status: PaymentStatus,
     amount: number,
+    gatewayData?: any,
   ): Promise<void> {
     try {
       const { sender, paymentType } = payment;
@@ -1295,8 +1301,25 @@ export class PaymentService {
       };
 
       if (status === PaymentStatus.COMPLETED) {
+        // Extract data from webhook for detailed message
+        const transactionId =
+          gatewayData?.transactionId || payment.gatewayTransactionId || 'N/A';
+        const processedDate = gatewayData?.paidAt
+          ? new Date(gatewayData?.paidAt).toLocaleDateString('en-RW', {
+              year: 'numeric',
+              month: 'short',
+              day: 'numeric',
+              hour: '2-digit',
+              minute: '2-digit',
+            })
+          : new Date().toLocaleDateString('en-RW');
+
         // Payment successful notifications
-        const successMessage = `Great news! Your payment of ${formatAmount(amount)} for ${paymentType?.name || 'payment'} has been successfully processed. Transaction completed on ${new Date().toLocaleDateString('en-RW')}.`;
+        const successMessage = `Dear ${
+          sender.firstName || 'Valued Member'
+        }, your payment of ${formatAmount(amount)} for ${
+          paymentType?.name || 'payment'
+        } has been successfully processed on ${processedDate}. Transaction ID: ${transactionId}`;
 
         // Send push notification
         if (sender.id) {
@@ -1309,9 +1332,16 @@ export class PaymentService {
           );
         }
 
-        // Send SMS notification
+        // Send detailed SMS notification
         if (sender.phone) {
-          const smsMessage = `COPAY: Payment successful! ${formatAmount(amount)} for ${paymentType?.name || 'payment'} has been processed. Thank you for using Copay.`;
+          const { cooperative } = payment;
+          const cooperativeName = cooperative?.name || 'your cooperative';
+
+          const smsMessage = `Dear ${
+            sender.firstName || 'Member'
+          }, greetings! Your payment of ${formatAmount(
+            amount,
+          )} to ${cooperativeName} has been successfully processed on ${processedDate}. Transaction ID: ${transactionId}. Thank you for using COPAY.`;
 
           await this.smsService.sendSms(
             sender.phone,
