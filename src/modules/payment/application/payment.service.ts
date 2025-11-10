@@ -1212,6 +1212,10 @@ export class PaymentService {
         updatedAt: new Date(),
       };
 
+      this.logger.log(
+        `Webhook processing - Mapping status: IremboPay="${webhookDto.gatewayData?.paymentStatus}" -> System="${webhookDto.status}"`,
+      );
+
       if (webhookDto.status === PaymentStatus.COMPLETED && paidAt) {
         const parsedDate = this.parseWebhookDate(paidAt);
         if (parsedDate) {
@@ -1235,6 +1239,10 @@ export class PaymentService {
         where: { id: payment.id },
         data: updateData,
       });
+
+      this.logger.log(
+        `Payment update completed - ID: ${payment.id}, Status set to: ${updateData.status}`,
+      );
 
       this.logger.log(
         `Payment ${payment.id} updated via IremboPay webhook - Status: ${webhookDto.status}, Invoice: ${invoiceNumber}`,
