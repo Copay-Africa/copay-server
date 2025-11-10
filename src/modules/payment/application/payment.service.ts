@@ -1301,7 +1301,6 @@ export class PaymentService {
       };
 
       if (status === PaymentStatus.COMPLETED) {
-        // Extract data from webhook for detailed message
         const transactionId =
           gatewayData?.transactionId || payment.gatewayTransactionId || 'N/A';
         const processedDate = gatewayData?.paidAt
