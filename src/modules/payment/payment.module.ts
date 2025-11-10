@@ -13,18 +13,15 @@ import { IrremboPayGateway } from './infrastructure/irembopay.gateway';
 // Controllers
 import { PaymentTypeController } from './presentation/payment-type.controller';
 import { PaymentController } from './presentation/payment.controller';
-import { PaymentWebhookController } from './presentation/payment-webhook.controller';
 
 // Activity Module
 import { ActivityModule } from '../activity/activity.module';
+import { NotificationModule } from '../notification/notification.module';
+import { SmsModule } from '../sms/sms.module';
 
 @Module({
-  imports: [ActivityModule],
-  controllers: [
-    PaymentTypeController,
-    PaymentController,
-    PaymentWebhookController,
-  ],
+  imports: [ActivityModule, NotificationModule, SmsModule],
+  controllers: [PaymentTypeController, PaymentController],
   providers: [
     // Core Services
     PrismaService,

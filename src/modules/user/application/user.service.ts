@@ -649,10 +649,16 @@ export class UserService {
       ] = await Promise.all([
         this.prismaService.user.count(),
         this.prismaService.user.count({ where: { role: UserRole.TENANT } }),
-        this.prismaService.user.count({ where: { role: UserRole.ORGANIZATION_ADMIN } }),
-        this.prismaService.user.count({ where: { role: UserRole.SUPER_ADMIN } }),
+        this.prismaService.user.count({
+          where: { role: UserRole.ORGANIZATION_ADMIN },
+        }),
+        this.prismaService.user.count({
+          where: { role: UserRole.SUPER_ADMIN },
+        }),
         this.prismaService.user.count({ where: { status: UserStatus.ACTIVE } }),
-        this.prismaService.user.count({ where: { status: UserStatus.INACTIVE } }),
+        this.prismaService.user.count({
+          where: { status: UserStatus.INACTIVE },
+        }),
         this.prismaService.user.count({
           where: { createdAt: { gte: thirtyDaysAgo } },
         }),

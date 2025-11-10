@@ -13,7 +13,8 @@ export class UpdateComplaintStatusDto {
 
   @ApiPropertyOptional({
     description: 'Resolution message or notes about the status change',
-    example: 'Maintenance team has been notified and will address the water pressure issue within 24 hours.',
+    example:
+      'Maintenance team has been notified and will address the water pressure issue within 24 hours.',
   })
   @IsOptional()
   @IsString()

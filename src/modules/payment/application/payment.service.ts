@@ -17,6 +17,8 @@ import { PaginatedResponseDto } from '../../../shared/dto/paginated-response.dto
 import { PaymentStatus, PaymentAmountType, UserRole } from '@prisma/client';
 import { PaymentGatewayFactory } from '../infrastructure/payment-gateway.factory';
 import { ActivityService } from '../../activity/application/activity.service';
+import { NotificationService } from '../../notification/application/notification.service';
+import { SmsService } from '../../sms/application/sms.service';
 
 @Injectable()
 export class PaymentService {
@@ -27,6 +29,8 @@ export class PaymentService {
     @Inject(CACHE_MANAGER) private cacheManager: Cache,
     private paymentGatewayFactory: PaymentGatewayFactory,
     private activityService: ActivityService,
+    private notificationService: NotificationService,
+    private smsService: SmsService,
   ) {}
 
   async initiatePayment(
@@ -126,6 +130,12 @@ export class PaymentService {
         initiatePaymentDto.paymentMethod,
       );
 
+      // Get user data for invoice creation
+      const sender = await this.prismaService.user.findUnique({
+        where: { id: senderId },
+        select: { firstName: true, lastName: true, email: true },
+      });
+
       // Prepare gateway request
       const gatewayRequest = {
         amount: initiatePaymentDto.amount,
@@ -138,6 +148,10 @@ export class PaymentService {
           paymentType.description ||
           'Payment',
         callbackUrl: `${process.env.API_BASE_URL}/api/v1/webhooks/payments/irembopay`,
+        email: sender?.email || undefined,
+        customerName: sender
+          ? `${sender.firstName} ${sender.lastName}`.trim()
+          : undefined,
       };
 
       // Initiate payment with gateway
@@ -226,12 +240,16 @@ export class PaymentService {
         }
       }
 
-      // Update payment record with gateway information
+      const invoiceNumber =
+        gatewayResponse.success && gatewayResponse.gatewayReference
+          ? gatewayResponse.gatewayReference
+          : null; // Only save real invoice numbers from gateway
+
       await this.prismaService.payment.update({
         where: { id: payment.id },
         data: {
           paymentReference: gatewayResponse.gatewayReference || payment.id,
-          invoiceNumber: gatewayResponse.success ? gatewayResponse.gatewayReference : null, // Store invoice number only on success
+          invoiceNumber: invoiceNumber, // Save actual invoice number from IremboPay or null
           status: gatewayResponse.success
             ? PaymentStatus.PENDING
             : PaymentStatus.FAILED,
@@ -278,10 +296,8 @@ export class PaymentService {
       (responseDto as any).gatewayTransactionId =
         gatewayResponse.gatewayTransactionId;
 
-      // Ensure invoice number is included in response
-      if (gatewayResponse.success && gatewayResponse.gatewayReference) {
-        (responseDto as any).invoiceNumber = gatewayResponse.gatewayReference;
-      }
+      // The invoice number is now always included in the responseDto from mapToResponseDto
+      // since we always generate one during payment update
 
       return responseDto;
     } catch (error) {
@@ -875,13 +891,7 @@ export class PaymentService {
       },
       data: updateData,
     });
-
-    // TODO: Add notification logic here
-    // - Send SMS/Email to user about payment status
-    // - Notify organization admin if needed
-    // - Update any related records (balances, etc.)
   }
-
   async searchPayments(
     searchDto: PaymentSearchDto,
     userId: string,
@@ -1032,10 +1042,62 @@ export class PaymentService {
     }
   }
 
-  private async validatePaymentAmount(
-    amount: number,
-    paymentType: any,
+  async updatePaymentStatus(
+    paymentId: string,
+    status: PaymentStatus,
+    failureReason?: string,
+    gatewayData?: Record<string, any>,
   ): Promise<void> {
+    try {
+      // Find the payment
+      const payment = await this.prismaService.payment.findUnique({
+        where: { id: paymentId },
+      });
+
+      if (!payment) {
+        throw new NotFoundException('Payment not found');
+      }
+
+      // Update payment status
+      const updateData: {
+        status: PaymentStatus;
+        updatedAt: Date;
+        paidAt?: Date;
+        gatewayResponse?: any;
+      } = {
+        status: status,
+        updatedAt: new Date(),
+      };
+
+      if (status === PaymentStatus.COMPLETED) {
+        updateData.paidAt = new Date();
+      }
+
+      if (failureReason && status === PaymentStatus.FAILED) {
+        const existingGatewayResponse =
+          (payment.gatewayResponse as Record<string, any>) || {};
+        updateData.gatewayResponse = {
+          ...existingGatewayResponse,
+          failureReason,
+          ...(gatewayData || {}),
+        };
+      }
+
+      await this.prismaService.payment.update({
+        where: { id: paymentId },
+        data: updateData,
+      });
+
+      this.logger.log(`Payment ${paymentId} status updated to ${status}`);
+    } catch (error) {
+      this.logger.error(
+        `Failed to update payment status: ${(error as Error).message}`,
+      );
+      throw error;
+    }
+  }
+
+  async validatePaymentAmount(amount: number, paymentType: any): Promise<void> {
     if (amount <= 0) {
       throw new BadRequestException('Payment amount must be greater than zero');
     }
@@ -1093,5 +1155,199 @@ export class PaymentService {
       createdAt: payment.createdAt,
       updatedAt: payment.updatedAt,
     };
+  }
+
+  async handleIremboPayWebhook(
+    invoiceNumber: string,
+    webhookDto: PaymentWebhookDto,
+    amount: number,
+    paidAt?: string,
+  ): Promise<void> {
+    try {
+      // Find payment by invoice number
+      const payment = await this.prismaService.payment.findFirst({
+        where: { invoiceNumber: invoiceNumber },
+        include: {
+          sender: {
+            select: {
+              id: true,
+              firstName: true,
+              lastName: true,
+              email: true,
+              phone: true,
+            },
+          },
+          paymentType: {
+            select: {
+              name: true,
+              description: true,
+            },
+          },
+          cooperative: {
+            select: {
+              name: true,
+            },
+          },
+        },
+      });
+
+      if (!payment) {
+        this.logger.warn(
+          `Payment with invoice number ${invoiceNumber} not found`,
+        );
+        throw new NotFoundException(
+          `Payment with invoice number ${invoiceNumber} not found`,
+        );
+      }
+
+      // Update payment with webhook data
+      const updateData: {
+        status: PaymentStatus;
+        updatedAt: Date;
+        paidAt?: Date;
+        gatewayResponse?: any;
+        gatewayTransactionId?: string;
+        paymentReference?: string;
+      } = {
+        status: webhookDto.status,
+        updatedAt: new Date(),
+      };
+
+      if (webhookDto.status === PaymentStatus.COMPLETED && paidAt) {
+        updateData.paidAt = new Date(paidAt);
+      }
+
+      if (webhookDto.gatewayTransactionId) {
+        updateData.gatewayTransactionId = webhookDto.gatewayTransactionId;
+      }
+
+      if (webhookDto.gatewayReference) {
+        updateData.paymentReference = webhookDto.gatewayReference;
+      }
+
+      if (webhookDto.gatewayData) {
+        updateData.gatewayResponse = webhookDto.gatewayData;
+      }
+
+      await this.prismaService.payment.update({
+        where: { id: payment.id },
+        data: updateData,
+      });
+
+      this.logger.log(
+        `Payment ${payment.id} updated via IremboPay webhook - Status: ${webhookDto.status}, Invoice: ${invoiceNumber}`,
+      );
+
+      // Send notifications and SMS to the user
+      await this.sendPaymentNotifications(payment, webhookDto.status, amount);
+
+      // Log activity for payment status change
+      if (webhookDto.status === PaymentStatus.COMPLETED) {
+        await this.activityService.logPaymentCompleted(payment.id, amount, {
+          userId: payment.senderId,
+          cooperativeId: payment.cooperativeId,
+        });
+      } else if (webhookDto.status === PaymentStatus.FAILED) {
+        await this.activityService.logPaymentFailed(
+          payment.id,
+          amount,
+          webhookDto.failureReason || 'Payment failed',
+          { userId: payment.senderId, cooperativeId: payment.cooperativeId },
+        );
+      }
+    } catch (error) {
+      this.logger.error(
+        `Failed to process IremboPay webhook for invoice ${invoiceNumber}: ${(error as Error).message}`,
+      );
+      throw error;
+    }
+  }
+
+  private async sendPaymentNotifications(
+    payment: any,
+    status: PaymentStatus,
+    amount: number,
+  ): Promise<void> {
+    try {
+      const { sender, paymentType } = payment;
+
+      if (!sender) {
+        this.logger.warn(`No sender found for payment ${payment.id}`);
+        return;
+      }
+
+      const formatAmount = (amount: number): string => {
+        return new Intl.NumberFormat('en-RW', {
+          style: 'currency',
+          currency: 'RWF',
+          minimumFractionDigits: 0,
+        }).format(amount);
+      };
+
+      if (status === PaymentStatus.COMPLETED) {
+        // Payment successful notifications
+        const successMessage = `Great news! Your payment of ${formatAmount(amount)} for ${paymentType?.name || 'payment'} has been successfully processed. Transaction completed on ${new Date().toLocaleDateString('en-RW')}.`;
+
+        // Send push notification
+        if (sender.id) {
+          await this.notificationService.sendPaymentNotification(
+            payment,
+            sender,
+            'PUSH_NOTIFICATION' as any,
+            'Payment Successful! 🎉',
+            successMessage,
+          );
+        }
+
+        // Send SMS notification
+        if (sender.phone) {
+          const smsMessage = `COPAY: Payment successful! ${formatAmount(amount)} for ${paymentType?.name || 'payment'} has been processed. Thank you for using Copay.`;
+
+          await this.smsService.sendSms(
+            sender.phone,
+            smsMessage,
+            `payment-success-${payment.id}`,
+          );
+        }
+
+        this.logger.log(
+          `Success notifications sent to user ${sender.id} for payment ${payment.id}`,
+        );
+      } else if (status === PaymentStatus.FAILED) {
+        // Payment failed notifications
+        const failureMessage = `Your payment of ${formatAmount(amount)} for ${paymentType?.name || 'payment'} could not be processed. Please try again or contact support if the issue persists.`;
+
+        // Send push notification
+        if (sender.id) {
+          await this.notificationService.sendPaymentNotification(
+            payment,
+            sender,
+            'PUSH_NOTIFICATION' as any,
+            'Payment Failed ❌',
+            failureMessage,
+          );
+        }
+
+        // Send SMS notification
+        if (sender.phone) {
+          const smsMessage = `COPAY: Payment failed. ${formatAmount(amount)} for ${paymentType?.name || 'payment'} could not be processed. Please try again.`;
+
+          await this.smsService.sendSms(
+            sender.phone,
+            smsMessage,
+            `payment-failure-${payment.id}`,
+          );
+        }
+
+        this.logger.log(
+          `Failure notifications sent to user ${sender.id} for payment ${payment.id}`,
+        );
+      }
+    } catch (error) {
+      this.logger.error(
+        `Failed to send notifications for payment ${payment.id}: ${(error as Error).message}`,
+      );
+      // Don't throw error here - notifications are not critical to payment processing
+    }
   }
 }

@@ -6,6 +6,8 @@ export interface PaymentGatewayRequest {
   reference: string;
   description?: string;
   callbackUrl: string;
+  email?: string; // Customer email for invoice creation
+  customerName?: string; // Customer name for invoice creation
 }
 
 export interface PaymentGatewayResponse {

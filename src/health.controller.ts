@@ -21,7 +21,10 @@ export class HealthController {
         connected: !!process.env.DATABASE_URL,
       },
       firebase: {
-        configured: !!(process.env.FIREBASE_PROJECT_ID && process.env.FIREBASE_SERVICE_ACCOUNT_KEY),
+        configured: !!(
+          process.env.FIREBASE_PROJECT_ID &&
+          process.env.FIREBASE_SERVICE_ACCOUNT_KEY
+        ),
         projectId: process.env.FIREBASE_PROJECT_ID || 'not-set',
       },
     };
@@ -35,10 +38,19 @@ export class HealthController {
       nodeEnv: this.configService.get('NODE_ENV'),
       port: this.configService.get('PORT'),
       apiPrefix: this.configService.get('app.apiPrefix'),
-      databaseUrl: this.configService.get('database.url') ? 'configured' : 'missing',
-      jwtSecret: this.configService.get('jwt.secret') ? 'configured' : 'missing',
-      firebaseProjectId: this.configService.get('firebase.projectId') || 'missing',
-      firebaseServiceAccount: this.configService.get('firebase.serviceAccountKey') ? 'configured' : 'missing',
+      databaseUrl: this.configService.get('database.url')
+        ? 'configured'
+        : 'missing',
+      jwtSecret: this.configService.get('jwt.secret')
+        ? 'configured'
+        : 'missing',
+      firebaseProjectId:
+        this.configService.get('firebase.projectId') || 'missing',
+      firebaseServiceAccount: this.configService.get(
+        'firebase.serviceAccountKey',
+      )
+        ? 'configured'
+        : 'missing',
     };
   }
 }

@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unsafe-assignment */
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as crypto from 'crypto';
@@ -46,15 +47,6 @@ interface IremboPayApiInvoiceResponse {
   };
 }
 
-interface IremboPayPushResponse {
-  success: boolean;
-  data: {
-    transactionId: string;
-    status: string;
-  };
-  message?: string;
-}
-
 interface IremboPayStatusResponse {
   status: string;
   amount: number;
@@ -101,42 +93,18 @@ export class IrremboPayGateway {
         };
       }
 
-      // Step 2: For mobile money, initiate push payment
-      if (this.isMobileMoney(request.paymentMethod)) {
-        const pushResponse = (await this.initiateMobileMoneyPush(
-          request.paymentAccount,
-          request.paymentMethod,
-          invoiceResponse.data.invoiceNumber,
-        )) as IremboPayPushResponse;
-
-        // Use invoice number as fallback if push transaction ID is not available
-        const gatewayTransactionId =
-          pushResponse.data?.transactionId ||
-          invoiceResponse.data.invoiceNumber;
-
-        return {
-          success: true,
-          gatewayTransactionId: gatewayTransactionId,
-          gatewayReference: invoiceResponse.data.invoiceNumber,
-          paymentUrl: invoiceResponse.data.paymentLinkUrl,
-          message: pushResponse.success
-            ? 'Mobile money payment initiated successfully'
-            : `Invoice created but push failed: ${pushResponse.message}`,
-          data: {
-            invoice: invoiceResponse.data,
-            pushPayment: pushResponse.data || { error: pushResponse.message },
-          },
-        };
-      }
-
-      // For bank payments, return invoice with payment URL
+      // Only create invoice, external service will handle payment processing
       return {
         success: true,
         gatewayTransactionId: invoiceResponse.data.invoiceNumber,
         gatewayReference: invoiceResponse.data.invoiceNumber,
         paymentUrl: invoiceResponse.data.paymentLinkUrl,
         message: 'Invoice created successfully',
-        data: invoiceResponse.data,
+        data: {
+          invoice: invoiceResponse.data,
+          paymentMethod: request.paymentMethod,
+          paymentAccount: request.paymentAccount,
+        },
       };
     } catch (error) {
       const errorMessage =
@@ -155,7 +123,7 @@ export class IrremboPayGateway {
   ): Promise<PaymentGatewayStatus> {
     try {
       // In a real implementation, this would make an HTTP request to IremboPay
-      const response = (await this.makeHttpRequest(
+      const response = (await this.makeRequest(
         `/payments/${gatewayTransactionId}/status`,
         undefined,
         {
@@ -194,9 +162,7 @@ export class IrremboPayGateway {
         .digest('hex');
 
       return signature === `sha256=${expectedSignature}`;
-    } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : 'Webhook verification failed';
+    } catch {
       return false;
     }
   }
@@ -205,25 +171,46 @@ export class IrremboPayGateway {
     request: PaymentGatewayRequest,
   ): Promise<IremboPayInvoiceResponse> {
     try {
+      const productCode = process.env.IREMBOPAY_DEFAULT_PRODUCT_CODE;
+
+      // Log the product code for debugging
+      this.logger.log(`Creating invoice with product code: ${productCode}`);
+
+      if (!productCode) {
+        this.logger.error(
+          'IREMBOPAY_DEFAULT_PRODUCT_CODE is not set in environment variables',
+        );
+        throw new Error('Product code configuration missing');
+      }
+
       const invoicePayload = {
         transactionId: request.reference,
+        paymentAccountIdentifier: this.getAccountId(),
+        customer: {
+          email:
+            request.email ||
+            `${this.extractPhoneNumber(request.paymentAccount)}@copay.app`,
+          phoneNumber: this.extractPhoneNumber(request.paymentAccount),
+          name: request.customerName || 'Copay User',
+        },
         paymentItems: [
           {
-            code: `${process.env.IREMBOPAY_DEFAULT_PRODUCT_CODE}`,
-            quantity: 1,
             unitAmount: request.amount,
+            quantity: 1,
+            code: productCode,
           },
         ],
-        paymentAccountIdentifier: this.getPaymentAccountIdentifier(),
-        description: request.description || 'Copay payment invoice on IremboPay',
-        customer: {
-          phoneNumber: this.extractPhoneNumber(request.paymentAccount),
-          name: 'Copay User',
-        },
+        description:
+          request.description || 'Copay payment invoice on IremboPay',
+        expiryAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(), // 24 hours from now
         language: 'EN',
       };
 
-      const response = (await this.makeHttpRequest(
+      this.logger.log(
+        `Invoice payload: ${JSON.stringify(invoicePayload, null, 2)}`,
+      );
+
+      const response = (await this.makeRequest(
         '/payments/invoices',
         invoicePayload,
         {
@@ -232,6 +219,10 @@ export class IrremboPayGateway {
           'X-API-Version': '2',
         },
       )) as IremboPayApiInvoiceResponse;
+
+      this.logger.log(
+        `Invoice creation response: ${JSON.stringify(response, null, 2)}`,
+      );
 
       return {
         success: true,
@@ -246,6 +237,9 @@ export class IrremboPayGateway {
       const errorMessage =
         error instanceof Error ? error.message : 'Invoice creation failed';
 
+      this.logger.error(`Invoice creation failed: ${errorMessage}`);
+      this.logger.error(`Error details: ${JSON.stringify(error, null, 2)}`);
+
       return {
         success: false,
         message: errorMessage,
@@ -259,117 +253,16 @@ export class IrremboPayGateway {
     }
   }
 
-  private async initiateMobileMoneyPush(
-    accountIdentifier: string,
-    paymentMethod: string,
-    invoiceNumber: string,
-  ): Promise<any> {
-    try {
-      const formattedPhone = this.formatPhoneNumber(accountIdentifier);
-      const iremboProvider = this.mapToIremboProvider(paymentMethod);
-
-      // Validate phone number format for production
-      if (!this.isValidRwandaPhoneNumber(formattedPhone)) {
-        const errorMsg = `Invalid Rwanda phone number format: ${formattedPhone}`;
-        return {
-          success: false,
-          message: errorMsg,
-          data: null,
-        };
-      }
-
-      const pushPayload = {
-        accountIdentifier: formattedPhone,
-        paymentProvider: iremboProvider,
-        invoiceNumber: invoiceNumber,
-        transactionReference: `COPAY_${Date.now()}`,
-      };
-
-      const response = (await this.makeHttpRequest(
-        '/payments/transactions/initiate',
-        pushPayload,
-        {
-          'Content-Type': 'application/json',
-          'irembopay-secretKey': this.secretKey,
-          'X-API-Version': '2',
-        },
-      )) as IremboPayPushResponse['data'];
-
-      console.log(response);
-
-      return {
-        success: true,
-        data: response,
-      };
-    } catch (error: any) {
-      return {
-        success: false,
-        message: error.message || 'Mobile money push failed',
-        data: null,
-      };
-    }
-  }
-
-  private isValidRwandaPhoneNumber(phoneNumber: string): boolean {
-    // validation: 07XXXXXXXX (10 digits)
-    const rwandaMobileRegex = /^07[0-9]{8}$/;
-    return rwandaMobileRegex.test(phoneNumber);
-  }
-
-  private isMobileMoney(paymentMethod: string): boolean {
-    return ['MOBILE_MONEY_MTN', 'MOBILE_MONEY_AIRTEL'].includes(paymentMethod);
-  }
-
-  private mapToIremboProvider(paymentMethod: string): string {
-    const mapping: Record<string, string> = {
-      MOBILE_MONEY_MTN: 'MTN',
-      MOBILE_MONEY_AIRTEL: 'AIRTEL',
-    };
-    return mapping[paymentMethod] || paymentMethod;
-  }
-
-  private getPaymentAccountIdentifier(): string {
-    const accountId = this.configService.get('IREMBOPAY_PAYMENT_ACCOUNT_ID');
+  private getAccountId(): string {
+    const accountId = this.configService.get<string>(
+      'IREMBOPAY_PAYMENT_ACCOUNT_ID',
+    );
     return accountId || 'PACOUNT-2025';
   }
 
   private extractPhoneNumber(paymentAccount: string): string {
     // Extract phone number from payment account (remove + if present)
     return paymentAccount.replace(/^\+/, '');
-  }
-
-  private formatPhoneNumber(phoneNumber: string): string {
-    // Ensure phone number is in Rwanda format (07xxxxxxxx)
-    let cleaned = phoneNumber.replace(/^\+?250/, '');
-
-    // Remove any non-digit characters
-    cleaned = cleaned.replace(/\D/g, '');
-
-    // Ensure it starts with 07 for Rwanda mobile numbers
-    if (!cleaned.startsWith('07')) {
-      // If it's a 9-digit number starting with 7, add 0
-      if (cleaned.startsWith('7') && cleaned.length === 9) {
-        cleaned = '0' + cleaned;
-      } else {
-        // Take last 8 digits and prepend 07
-        cleaned = '07' + cleaned.slice(-8);
-      }
-    }
-
-    return cleaned;
-  }
-
-  private mapPaymentMethod(paymentMethod: string): string {
-    const mapping: Record<string, string> = {
-      // IremboPay handles all these payment methods through their unified API
-      MOBILE_MONEY_MTN: 'mtn_momo',
-      MOBILE_MONEY_AIRTEL: 'airtel_money',
-      BANK_BK: 'bank_of_kigali',
-      BANK_IM: 'im_bank',
-      BANK_ECOBANK: 'ecobank',
-    };
-
-    return mapping[paymentMethod] || 'unknown';
   }
 
   private mapStatus(
@@ -392,7 +285,7 @@ export class IrremboPayGateway {
     return statusMapping[status?.toLowerCase()] || 'pending';
   }
 
-  private async makeHttpRequest(
+  private async makeRequest(
     endpoint: string,
     data?: any,
     headers?: Record<string, string>,
@@ -400,32 +293,28 @@ export class IrremboPayGateway {
   ): Promise<any> {
     const url = `${this.baseUrl}${endpoint}`;
 
-    try {
-      const requestOptions: RequestInit = {
-        method,
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${this.apiKey}`,
-          ...headers,
-        },
-      };
+    const requestOptions: RequestInit = {
+      method,
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${this.apiKey}`,
+        ...headers,
+      },
+    };
 
-      if (data && method !== 'GET') {
-        requestOptions.body = JSON.stringify(data);
-      }
-
-      const response = await fetch(url, requestOptions);
-      const responseData = await response.json();
-
-      if (!response.ok) {
-        throw new Error(
-          `HTTP ${response.status}: ${JSON.stringify(responseData)}`,
-        );
-      }
-
-      return responseData;
-    } catch (error) {
-      throw error;
+    if (data && method !== 'GET') {
+      requestOptions.body = JSON.stringify(data);
     }
+
+    const response = await fetch(url, requestOptions);
+    const responseData: any = await response.json();
+
+    if (!response.ok) {
+      throw new Error(
+        `HTTP ${response.status}: ${JSON.stringify(responseData)}`,
+      );
+    }
+
+    return responseData;
   }
 }

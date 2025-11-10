@@ -16,7 +16,8 @@ export class ComplaintResponseDto {
 
   @ApiProperty({
     description: 'Detailed description of the complaint',
-    example: 'The water pressure in the bathroom has been very low for the past week.',
+    example:
+      'The water pressure in the bathroom has been very low for the past week.',
   })
   description: string;
 
@@ -36,7 +37,8 @@ export class ComplaintResponseDto {
 
   @ApiPropertyOptional({
     description: 'Resolution message or admin notes',
-    example: 'Maintenance team has been notified and will address the issue within 24 hours.',
+    example:
+      'Maintenance team has been notified and will address the issue within 24 hours.',
   })
   resolution?: string;
 
@@ -53,8 +55,8 @@ export class ComplaintResponseDto {
         filename: 'water_issue_photo.jpg',
         url: 'https://storage.example.com/complaints/photo1.jpg',
         size: 2048576,
-        contentType: 'image/jpeg'
-      }
+        contentType: 'image/jpeg',
+      },
     ],
   })
   attachments?: any;
@@ -65,7 +67,7 @@ export class ComplaintResponseDto {
       id: '507f1f77bcf86cd799439013',
       firstName: 'Jean',
       lastName: 'Mukamana',
-      phone: '+250788123456'
+      phone: '+250788123456',
     },
   })
   user: {
@@ -80,7 +82,7 @@ export class ComplaintResponseDto {
     example: {
       id: '507f1f77bcf86cd799439012',
       name: 'Default Cooperative',
-      code: 'DEFAULT_COOP'
+      code: 'DEFAULT_COOP',
     },
   })
   cooperative: {

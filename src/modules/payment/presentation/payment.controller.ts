@@ -7,25 +7,29 @@ import {
   Query,
   UseGuards,
   BadRequestException,
+  Headers,
+  HttpCode,
 } from '@nestjs/common';
 import {
   ApiTags,
   ApiOperation,
   ApiResponse,
   ApiBearerAuth,
+  ApiExcludeEndpoint,
 } from '@nestjs/swagger';
 import { PaymentService } from '../application/payment.service';
 import { InitiatePaymentDto } from './dto/initiate-payment.dto';
 import { PaymentResponseDto } from './dto/payment-response.dto';
 import { PaymentSearchDto } from './dto/payment-search.dto';
+import { PaymentWebhookDto } from './dto/payment-webhook.dto';
 import { PaginationDto } from '../../../shared/dto/pagination.dto';
 import { PaginatedResponseDto } from '../../../shared/dto/paginated-response.dto';
 import { JwtAuthGuard } from '../../../shared/guards/jwt-auth.guard';
 import { RolesGuard } from '../../../shared/guards/roles.guard';
 import { CurrentUser } from '../../../shared/decorators/current-user.decorator';
 import { AuthenticatedUser } from '../../../shared/decorators/current-user.decorator';
-import { UserRole } from '@prisma/client';
-import { Roles } from '../../../shared/decorators/auth.decorator';
+import { UserRole, PaymentStatus } from '@prisma/client';
+import { Roles, Public } from '../../../shared/decorators/auth.decorator';
 
 @ApiTags('Payments')
 @Controller('payments')
@@ -205,5 +209,129 @@ export class PaymentController {
       currentUser.cooperativeId!,
       currentUser.role as UserRole,
     );
+  }
+
+  @Post('callback/:id/status')
+  @ApiOperation({
+    summary: 'Update payment status via callback',
+    description: 'Endpoint for external services to update payment status',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Payment status updated successfully',
+  })
+  async updatePaymentStatus(
+    @Param('id') paymentId: string,
+    @Body()
+    statusUpdate: {
+      status: 'PENDING' | 'PROCESSING' | 'FAILED' | 'CANCELLED';
+      failureReason?: string;
+      gatewayData?: Record<string, any>;
+    },
+  ): Promise<{ status: string; message: string }> {
+    await this.paymentService.updatePaymentStatus(
+      paymentId,
+      statusUpdate.status as PaymentStatus,
+      statusUpdate.failureReason,
+      statusUpdate.gatewayData,
+    );
+
+    return {
+      status: 'success',
+      message: 'Payment status updated successfully',
+    };
+  }
+
+  @Post('webhook/irembopay')
+  @Public()
+  @HttpCode(200)
+  @ApiExcludeEndpoint() // Exclude from Swagger as it's for external service
+  async handleIremboPayWebhook(
+    @Body()
+    webhookPayload: {
+      success: boolean;
+      data: {
+        amount: number;
+        currency: string;
+        invoiceNumber: string;
+        transactionId: string;
+        createdAt: string;
+        updatedAt: string;
+        paidAt?: string;
+        expiryAt: string;
+        paymentStatus: string;
+        type: string;
+        paymentMethod: string;
+        paymentReference: string;
+        customer: {
+          email: string;
+          phoneNumber: string;
+        };
+        paymentItems: Array<{
+          code: string;
+          quantity: number;
+          unitAmount: number;
+        }>;
+        paymentAccountIdentifier: string;
+      };
+    },
+    @Headers('x-signature') signature?: string,
+  ): Promise<{ status: string; message: string }> {
+    try {
+      if (!webhookPayload.success || !webhookPayload.data) {
+        throw new BadRequestException('Invalid webhook payload from IremboPay');
+      }
+
+      const { data } = webhookPayload;
+
+      // Map IremboPay payment status to our system
+      const paymentStatus = this.mapIremboPayStatus(data.paymentStatus);
+
+      // Create webhook DTO from IremboPay payload
+      const webhookDto: PaymentWebhookDto = {
+        gatewayTransactionId: data.transactionId,
+        status: paymentStatus,
+        gatewayReference: data.paymentReference,
+        failureReason:
+          paymentStatus === PaymentStatus.FAILED ? 'Payment failed' : undefined,
+        gatewayData: data,
+        signature,
+      };
+
+      // Find payment by invoice number and update
+      await this.paymentService.handleIremboPayWebhook(
+        data.invoiceNumber,
+        webhookDto,
+        data.amount,
+        data.paidAt,
+      );
+
+      return {
+        status: 'success',
+        message: 'IremboPay webhook processed successfully',
+      };
+    } catch (error) {
+      throw new BadRequestException(
+        `Webhook processing failed: ${(error as Error).message}`,
+      );
+    }
+  }
+
+  private mapIremboPayStatus(status: string): PaymentStatus {
+    const statusMapping: Record<string, PaymentStatus> = {
+      pending: PaymentStatus.PENDING,
+      processing: PaymentStatus.PROCESSING,
+      successful: PaymentStatus.COMPLETED,
+      completed: PaymentStatus.COMPLETED,
+      paid: PaymentStatus.COMPLETED, // IremboPay sends "PAID" status
+      PAID: PaymentStatus.COMPLETED, // Handle uppercase version
+      failed: PaymentStatus.FAILED,
+      error: PaymentStatus.FAILED,
+      cancelled: PaymentStatus.CANCELLED,
+      canceled: PaymentStatus.CANCELLED,
+      timeout: PaymentStatus.FAILED,
+    };
+
+    return statusMapping[status?.toLowerCase()] || PaymentStatus.FAILED;
   }
 }

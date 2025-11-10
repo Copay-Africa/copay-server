@@ -545,7 +545,7 @@ export class ReminderService {
     occurrenceCount: number,
     advanceNoticeDays: number,
   ): Date {
-    let nextReminderDate = new Date(originalReminderDate);
+    const nextReminderDate = new Date(originalReminderDate);
 
     switch (pattern.toUpperCase()) {
       case 'DAILY':

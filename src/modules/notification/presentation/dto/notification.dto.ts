@@ -23,13 +23,13 @@ export class NotificationResponseDto {
   @ApiProperty({ example: '2025-11-02T10:30:00Z' })
   createdAt: Date;
 
-  @ApiProperty({ 
+  @ApiProperty({
     required: false,
     example: {
       id: '507f1f77bcf86cd799439019',
       title: 'Monthly Rent Payment',
-      type: 'PAYMENT_DUE'
-    }
+      type: 'PAYMENT_DUE',
+    },
   })
   reminder?: {
     id: string;
@@ -37,9 +37,9 @@ export class NotificationResponseDto {
     type: string;
   };
 
-  @ApiProperty({ 
+  @ApiProperty({
     required: false,
-    nullable: true
+    nullable: true,
   })
   payment?: {
     id: string;

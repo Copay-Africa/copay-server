@@ -275,7 +275,7 @@ export class AnnouncementService {
         where: whereClause,
         skip,
         take: limit,
-        orderBy: { [sortBy as string]: sortOrder },
+        orderBy: { [sortBy]: sortOrder },
         select: {
           id: true,
           title: true,
