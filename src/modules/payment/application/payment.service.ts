@@ -840,7 +840,6 @@ export class PaymentService {
   }
 
   async handleWebhook(webhookDto: PaymentWebhookDto): Promise<void> {
-    // Find payment transaction by gateway transaction ID
     const paymentTransaction =
       await this.prismaService.paymentTransaction.findUnique({
         where: {
@@ -1214,7 +1213,10 @@ export class PaymentService {
       };
 
       if (webhookDto.status === PaymentStatus.COMPLETED && paidAt) {
-        updateData.paidAt = new Date(paidAt);
+        const parsedDate = this.parseWebhookDate(paidAt);
+        if (parsedDate) {
+          updateData.paidAt = parsedDate;
+        }
       }
 
       if (webhookDto.gatewayTransactionId) {
@@ -1348,6 +1350,29 @@ export class PaymentService {
         `Failed to send notifications for payment ${payment.id}: ${(error as Error).message}`,
       );
       // Don't throw error here - notifications are not critical to payment processing
+    }
+  }
+
+  /**
+   * Parse date from webhook payload with fallback handling
+   */
+  private parseWebhookDate(dateString: string): Date | null {
+    try {
+      // Try parsing the date string directly
+      const date = new Date(dateString);
+
+      // Check if the date is valid
+      if (isNaN(date.getTime())) {
+        this.logger.warn(`Invalid date format received: ${dateString}`);
+        return null;
+      }
+
+      return date;
+    } catch (error) {
+      this.logger.error(
+        `Failed to parse date ${dateString}: ${(error as Error).message}`,
+      );
+      return null;
     }
   }
 }
