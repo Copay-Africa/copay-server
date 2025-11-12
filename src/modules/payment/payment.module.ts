@@ -4,6 +4,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 // Application Services
 import { PaymentTypeService } from './application/payment-type.service';
 import { PaymentService } from './application/payment.service';
+import { PaymentPeriodService } from './application/payment-period.service';
 
 // Infrastructure Services
 import { PaymentCacheService } from './infrastructure/payment-cache.service';
@@ -29,6 +30,7 @@ import { SmsModule } from '../sms/sms.module';
     // Application Services
     PaymentTypeService,
     PaymentService,
+    PaymentPeriodService,
 
     // Infrastructure Services
     PaymentCacheService,

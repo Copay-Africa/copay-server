@@ -20,6 +20,10 @@ import { PaymentGatewayFactory } from '../infrastructure/payment-gateway.factory
 import { ActivityService } from '../../activity/application/activity.service';
 import { NotificationService } from '../../notification/application/notification.service';
 import { SmsService } from '../../sms/application/sms.service';
+import {
+  PaymentPeriodService,
+  PaymentFrequency,
+} from './payment-period.service';
 
 @Injectable()
 export class PaymentService {
@@ -32,6 +36,7 @@ export class PaymentService {
     private activityService: ActivityService,
     private notificationService: NotificationService,
     private smsService: SmsService,
+    private paymentPeriodService: PaymentPeriodService,
   ) {}
 
   async initiatePayment(
@@ -66,6 +71,14 @@ export class PaymentService {
 
     const cooperative = await this.prismaService.cooperative.findUnique({
       where: { id: cooperativeId },
+      select: {
+        id: true,
+        name: true,
+        status: true,
+        paymentFrequency: true,
+        billingDayOfMonth: true,
+        billingDayOfYear: true,
+      },
     });
 
     if (!cooperative || cooperative.status !== 'ACTIVE') {
@@ -100,6 +113,14 @@ export class PaymentService {
         `You already have a pending ${paymentType.name} payment. Please complete or wait for the existing payment to expire before initiating a new one.`,
       );
     }
+
+    // Check billing period restrictions - prevent multiple payments within the same billing cycle
+    await this.validateBillingPeriodRestrictions(
+      senderId,
+      cooperativeId,
+      initiatePaymentDto.paymentTypeId,
+      cooperative,
+    );
 
     // Validate payment amount based on payment type rules
     await this.validatePaymentAmount(initiatePaymentDto.amount, paymentType);
@@ -1184,6 +1205,85 @@ export class PaymentService {
     }
   }
 
+  /**
+   * Validate billing period restrictions to prevent multiple payments within the same cycle
+   */
+  private async validateBillingPeriodRestrictions(
+    senderId: string,
+    cooperativeId: string,
+    paymentTypeId: string,
+    cooperative: any,
+  ): Promise<void> {
+    // Skip validation if no payment frequency is set (backward compatibility)
+    if (!cooperative.paymentFrequency) {
+      return;
+    }
+
+    try {
+      // Prepare cooperative settings for period calculation
+      const cooperativeSettings = {
+        paymentFrequency: cooperative.paymentFrequency as PaymentFrequency,
+        billingDayOfMonth: cooperative.billingDayOfMonth,
+        billingDayOfYear: cooperative.billingDayOfYear,
+      };
+
+      // Get current billing period boundaries
+      const currentPeriod =
+        this.paymentPeriodService.getCurrentBillingPeriod(cooperativeSettings);
+
+      // Check if tenant has already paid for this billing period
+      const existingPaymentInPeriod =
+        await this.prismaService.payment.findFirst({
+          where: {
+            senderId,
+            cooperativeId,
+            paymentTypeId,
+            status: PaymentStatus.COMPLETED,
+            paidAt: {
+              gte: currentPeriod.startDate,
+              lte: currentPeriod.endDate,
+            },
+          },
+          orderBy: {
+            paidAt: 'desc',
+          },
+        });
+
+      if (existingPaymentInPeriod) {
+        const nextPeriod = this.paymentPeriodService.getNextBillingPeriod(
+          cooperativeSettings,
+          currentPeriod,
+        );
+
+        const frequencyText = cooperative.paymentFrequency.toLowerCase();
+        const nextPeriodDate = nextPeriod.startDate.toLocaleDateString(
+          'en-RW',
+          {
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric',
+          },
+        );
+
+        throw new BadRequestException(
+          `You have already paid for the current ${frequencyText} billing period. Your next payment is due on ${nextPeriodDate}.`,
+        );
+      }
+    } catch (error) {
+      if (error instanceof BadRequestException) {
+        throw error;
+      }
+
+      this.logger.error(
+        `Failed to validate billing period restrictions: ${(error as Error).message}`,
+      );
+      // Don't block payment if validation fails - log and continue
+      this.logger.warn(
+        `Skipping billing period validation for payment ${paymentTypeId} due to error`,
+      );
+    }
+  }
+
   private mapToResponseDto(payment: any): PaymentResponseDto {
     return {
       id: payment.id,
@@ -1344,7 +1444,7 @@ export class PaymentService {
       }
 
       // Only send notifications for confirmed final states
-      if (![PaymentStatus.COMPLETED, PaymentStatus.FAILED].includes(status)) {
+      if (status !== PaymentStatus.COMPLETED && status !== PaymentStatus.FAILED) {
         this.logger.debug(
           `Skipping notifications for payment ${payment.id} with status ${status}`,
         );

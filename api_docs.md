@@ -540,6 +540,9 @@ Some endpoints are public and don't require authentication:
   "address": "Nyamirambo, Kigali, Rwanda",
   "phone": "+250788111222",
   "email": "admin@nyamirambo.coop",
+  "paymentFrequency": "MONTHLY",
+  "billingDayOfMonth": 1,
+  "billingDayOfYear": null,
   "settings": {
     "currency": "RWF",
     "timezone": "Africa/Kigali",
@@ -548,6 +551,34 @@ Some endpoints are public and don't require authentication:
   }
 }
 ```
+
+#### Payment Frequency Configuration 🆕
+
+**Overview:**
+Each cooperative can now define billing periods to control payment frequency and prevent duplicate payments. This ensures proper payment timing and financial management for housing cooperatives.
+
+**Configuration Fields:**
+
+- `paymentFrequency` (optional): Defines billing cycle frequency
+  - `DAILY`: Tenants can pay once per day
+  - `MONTHLY`: Tenants can pay once per month (recommended for most cooperatives)
+  - `YEARLY`: Tenants can pay once per year (for annual fees)
+  - `null`: No frequency restrictions (backward compatibility mode)
+
+- `billingDayOfMonth` (optional): Day of month for MONTHLY billing (1-31, default: 1)
+  - Example: Setting to 15 means billing periods run from 15th of current month to 14th of next month
+  - Use case: Rent due on 15th of each month
+
+- `billingDayOfYear` (optional): Date for YEARLY billing (ISO date format: "YYYY-MM-DD")
+  - Example: "2025-04-01" means yearly periods run from April 1st to March 31st of next year
+  - Use case: Annual membership fees or property taxes
+
+**Business Rules:**
+
+1. **Period Enforcement**: Once a tenant pays for a billing period, they cannot pay again until the next period
+2. **Backward Compatibility**: Existing cooperatives without frequency settings work as before
+3. **Flexible Configuration**: Each cooperative can set different frequencies for different payment types
+4. **Administrative Override**: Super admins can bypass restrictions for special cases
 
 #### List Cooperatives
 
@@ -831,6 +862,77 @@ curl -X GET "https://api.copay.com/reminders/search?type=PAYMENT_DUE&status=ACTI
 
 ### Payments
 
+#### Payment Frequency Management 🆕
+
+**Enhanced Payment Control System**
+
+The Copay system includes sophisticated payment frequency management to prevent duplicate payments and enforce billing periods for cooperatives. This feature ensures proper payment timing and prevents abuse of the payment system.
+
+**Key Features:**
+
+1. **Billing Period Enforcement**: Each cooperative defines payment frequency (DAILY, MONTHLY, YEARLY)
+2. **Duplicate Payment Prevention**: Tenants cannot initiate multiple payments for the same period
+3. **Automated Expiration**: Pending payments auto-expire after 30 minutes
+4. **One Active Payment per Type**: Only one pending payment allowed per payment type
+
+**Cooperative Payment Frequency Configuration:**
+
+Cooperatives can configure their payment frequency when created or updated:
+
+```json
+{
+  "name": "Green Valley Cooperative",
+  "paymentFrequency": "MONTHLY",
+  "billingDayOfMonth": 1,
+  "billingDayOfYear": null
+}
+```
+
+**Payment Frequency Types:**
+
+- **`DAILY`**: Tenants can pay once per day
+  - Billing period: 24-hour periods from 00:00:00 to 23:59:59
+  - Example: Payment made on 2025-11-12 prevents another payment until 2025-11-13
+
+- **`MONTHLY`**: Tenants can pay once per month (default)
+  - Billing period: Based on `billingDayOfMonth` setting (1-31, default: 1)
+  - Example: If `billingDayOfMonth` is 15, billing periods run from 15th of current month to 14th of next month
+  - Real scenario: Payment made on Nov 20 for a Nov 15-Dec 14 period prevents another payment until Dec 15
+
+- **`YEARLY`**: Tenants can pay once per year
+  - Billing period: Based on `billingDayOfYear` setting (ISO date format)
+  - Example: If `billingDayOfYear` is "2025-04-01", yearly periods run from April 1st to March 31st of next year
+  - Real scenario: Payment made on June 15, 2025 prevents another payment until April 1, 2026
+
+- **`null`**: No frequency restrictions (backward compatibility)
+  - Only existing active payment check applies
+  - Allows multiple payments per period
+
+**Payment Validation Flow:**
+
+1. **Active Payment Check**: Verify no pending/processing payments exist for same type
+2. **Billing Period Validation**: Check if tenant already paid for current billing period
+3. **Amount & Access Validation**: Validate payment amount and cooperative access
+4. **Payment Creation**: Create payment record and initiate gateway processing
+5. **Auto-Expiration**: Automatically expire payment after 30 minutes if not completed
+
+**Billing Period Calculation Examples:**
+
+*Monthly Billing (billingDayOfMonth: 15):*
+- Period 1: Nov 15, 2025 → Dec 14, 2025
+- Period 2: Dec 15, 2025 → Jan 14, 2026
+- Payment made on Nov 20 → blocks until Dec 15
+
+*Yearly Billing (billingDayOfYear: "2025-04-01"):*
+- Period 1: Apr 1, 2025 → Mar 31, 2026
+- Period 2: Apr 1, 2026 → Mar 31, 2027
+- Payment made on Jun 15, 2025 → blocks until Apr 1, 2026
+
+*Daily Billing:*
+- Period 1: Nov 12, 2025 00:00:00 → Nov 12, 2025 23:59:59
+- Period 2: Nov 13, 2025 00:00:00 → Nov 13, 2025 23:59:59
+- Payment made on Nov 12 10:30 AM → blocks until Nov 13 00:00:00
+
 #### Initiate Payment
 
 **POST** `/payments`
@@ -846,6 +948,62 @@ curl -X GET "https://api.copay.com/reminders/search?type=PAYMENT_DUE&status=ACTI
   "idempotencyKey": "payment_67890abcdef12345"
 }
 ```
+
+**Enhanced Validation Responses:**
+
+The payment system now provides detailed error messages for various validation scenarios:
+
+```json
+// Error: Already paid for current billing period
+{
+  "statusCode": 400,
+  "message": "You have already paid for the current monthly billing period. Your next payment is due on December 1, 2025.",
+  "error": "Bad Request"
+}
+
+// Error: Existing pending payment
+{
+  "statusCode": 400,
+  "message": "You already have a pending Monthly Rent payment. Please complete or wait for the existing payment to expire before initiating a new one.",
+  "error": "Bad Request"
+}
+
+// Error: Payment expired (from automated expiration system)
+{
+  "statusCode": 400,
+  "message": "Your payment has expired after 30 minutes. Please initiate a new payment to proceed.",
+  "error": "Bad Request"
+}
+
+// Error: Different frequency examples
+{
+  "statusCode": 400,
+  "message": "You have already paid for the current daily billing period. Your next payment is due on November 13, 2025.",
+  "error": "Bad Request"
+}
+
+{
+  "statusCode": 400,
+  "message": "You have already paid for the current yearly billing period. Your next payment is due on April 1, 2026.",
+  "error": "Bad Request"
+}
+```
+
+**Automated Payment Expiration:**
+
+The system includes a cron job that runs every 10 minutes to automatically expire pending payments older than 30 minutes:
+
+- **Status Change**: `PENDING` or `PROCESSING` → `CANCELLED`
+- **Notifications**: Users receive SMS and push notifications about expired payments
+- **New Payment Allowed**: After expiration, users can initiate new payments for the same type
+
+**Integration Considerations:**
+
+1. **Mobile Apps**: Handle billing period validation errors gracefully by showing next due date
+2. **USSD Systems**: Display clear messages about when next payment can be made
+3. **Web Interfaces**: Show billing period status and countdown timers for pending payments
+4. **Webhook Processing**: Monitor for expired payment status updates
+5. **Notification Systems**: Implement retry logic for failed expiration notifications
 
 **Supported Payment Methods:**
 
@@ -2088,9 +2246,47 @@ X-IremboPay-Signature: sha256=<signature>
   phone?: string;
   email?: string;
   status: 'ACTIVE' | 'INACTIVE' | 'SUSPENDED';
+  paymentFrequency?: 'DAILY' | 'MONTHLY' | 'YEARLY';
+  billingDayOfMonth?: number; // 1-31, for MONTHLY frequency
+  billingDayOfYear?: Date;    // Date object, for YEARLY frequency
   settings: object;
   createdAt: Date;
   updatedAt: Date;
+}
+```
+
+### Billing Period 🆕
+
+```typescript
+{
+  startDate: Date;     // Start of the billing period
+  endDate: Date;       // End of the billing period  
+  periodIdentifier: string; // Unique identifier (e.g., "2025-11", "2025-11-12")
+}
+```
+
+**Billing Period Examples:**
+
+```typescript
+// DAILY billing period (November 12, 2025)
+{
+  startDate: "2025-11-12T00:00:00.000Z",
+  endDate: "2025-11-12T23:59:59.999Z",
+  periodIdentifier: "2025-11-12"
+}
+
+// MONTHLY billing period (November 2025, billing day: 1st)
+{
+  startDate: "2025-11-01T00:00:00.000Z",
+  endDate: "2025-11-30T23:59:59.999Z",
+  periodIdentifier: "2025-11"
+}
+
+// YEARLY billing period (April 1, 2025 - March 31, 2026)
+{
+  startDate: "2025-04-01T00:00:00.000Z",
+  endDate: "2026-03-31T23:59:59.999Z",
+  periodIdentifier: "2025"
 }
 ```
 

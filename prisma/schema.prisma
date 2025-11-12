@@ -154,6 +154,12 @@ enum AnnouncementPriority {
   URGENT
 }
 
+enum PaymentFrequency {
+  DAILY
+  MONTHLY
+  YEARLY
+}
+
 // Models
 model Cooperative {
   id          String            @id @default(auto()) @map("_id") @db.ObjectId
@@ -164,6 +170,12 @@ model Cooperative {
   phone       String?
   email       String?
   status      CooperativeStatus @default(PENDING_APPROVAL)
+  
+  // Payment frequency settings
+  paymentFrequency PaymentFrequency @default(MONTHLY)
+  billingDayOfMonth Int? // Day of month for MONTHLY (1-31), null for DAILY/YEARLY
+  billingDayOfYear DateTime? // Specific date for YEARLY billing
+  
   settings    Json? // Flexible settings storage
 
   // Relationships
