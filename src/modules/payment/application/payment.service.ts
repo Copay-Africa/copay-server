@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Cache } from 'cache-manager';
+import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { InitiatePaymentDto } from '../presentation/dto/initiate-payment.dto';
 import { PaymentResponseDto } from '../presentation/dto/payment-response.dto';
@@ -79,8 +80,54 @@ export class PaymentService {
       );
     }
 
+    // Check for existing pending payment of the same type
+    const existingPendingPayment = await this.prismaService.payment.findFirst({
+      where: {
+        senderId,
+        cooperativeId,
+        paymentTypeId: initiatePaymentDto.paymentTypeId,
+        status: {
+          in: [PaymentStatus.PENDING, PaymentStatus.PROCESSING],
+        },
+      },
+      orderBy: {
+        createdAt: 'desc',
+      },
+    });
+
+    if (existingPendingPayment) {
+      throw new BadRequestException(
+        `You already have a pending ${paymentType.name} payment. Please complete or wait for the existing payment to expire before initiating a new one.`,
+      );
+    }
+
     // Validate payment amount based on payment type rules
     await this.validatePaymentAmount(initiatePaymentDto.amount, paymentType);
+
+    // Check for existing active payments of the same type (Task 1: One Active Payment per Type)
+    const existingActivePayment = await this.prismaService.payment.findFirst({
+      where: {
+        senderId,
+        paymentTypeId: initiatePaymentDto.paymentTypeId,
+        cooperativeId,
+        status: {
+          in: [PaymentStatus.PENDING, PaymentStatus.PROCESSING],
+        },
+      },
+      include: {
+        paymentType: {
+          select: {
+            name: true,
+          },
+        },
+      },
+    });
+
+    if (existingActivePayment) {
+      throw new BadRequestException(
+        `You already have a pending payment for ${existingActivePayment.paymentType.name}. Please complete or wait for the existing payment to expire before initiating a new one.`,
+      );
+    }
 
     // Create payment record
     const payment = await this.prismaService.payment.create({
@@ -1278,6 +1325,10 @@ export class PaymentService {
     }
   }
 
+  /**
+   * Send payment notifications (SMS and push) only after backend confirms payment status
+   * This method is only called from webhook handlers after payment verification
+   */
   private async sendPaymentNotifications(
     payment: any,
     status: PaymentStatus,
@@ -1289,6 +1340,14 @@ export class PaymentService {
 
       if (!sender) {
         this.logger.warn(`No sender found for payment ${payment.id}`);
+        return;
+      }
+
+      // Only send notifications for confirmed final states
+      if (![PaymentStatus.COMPLETED, PaymentStatus.FAILED].includes(status)) {
+        this.logger.debug(
+          `Skipping notifications for payment ${payment.id} with status ${status}`,
+        );
         return;
       }
 
@@ -1410,6 +1469,126 @@ export class PaymentService {
         `Failed to parse date ${dateString}: ${(error as Error).message}`,
       );
       return null;
+    }
+  }
+
+  /**
+   * Auto-expire pending payments after 30 minutes
+   * Called by cron job every 10 minutes
+   */
+  @Cron(CronExpression.EVERY_10_MINUTES)
+  async expirePendingPayments(): Promise<void> {
+    try {
+      const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000); // 30 minutes ago
+
+      // Find all pending payments older than 30 minutes
+      const expiredPayments = await this.prismaService.payment.findMany({
+        where: {
+          status: {
+            in: [PaymentStatus.PENDING, PaymentStatus.PROCESSING],
+          },
+          createdAt: {
+            lt: thirtyMinutesAgo,
+          },
+        },
+        include: {
+          sender: true,
+          paymentType: true,
+          cooperative: true,
+        },
+      });
+
+      this.logger.log(`Found ${expiredPayments.length} payments to expire`);
+
+      // Update expired payments status
+      for (const payment of expiredPayments) {
+        await this.prismaService.payment.update({
+          where: { id: payment.id },
+          data: {
+            status: PaymentStatus.CANCELLED, // Using CANCELLED as EXPIRED doesn't exist
+            updatedAt: new Date(),
+          },
+        });
+
+        // Send expiration notification
+        await this.sendExpirationNotification(payment);
+
+        this.logger.log(`Payment ${payment.id} expired successfully`);
+      }
+
+      if (expiredPayments.length > 0) {
+        this.logger.log(
+          `Successfully expired ${expiredPayments.length} payments`,
+        );
+      }
+    } catch (error) {
+      this.logger.error(
+        `Failed to expire pending payments: ${(error as Error).message}`,
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * Send notification when payment expires
+   */
+  private async sendExpirationNotification(payment: any): Promise<void> {
+    try {
+      const { sender, paymentType, amount } = payment;
+
+      if (!sender) {
+        this.logger.warn(`No sender found for payment ${payment.id}`);
+        return;
+      }
+
+      // Format amount helper function
+      const formatAmount = (amount: number): string => {
+        return new Intl.NumberFormat('en-RW', {
+          style: 'currency',
+          currency: 'RWF',
+          minimumFractionDigits: 0,
+          maximumFractionDigits: 0,
+        }).format(amount);
+      };
+
+      const expirationMessage = `Your payment of ${formatAmount(amount)} for ${
+        paymentType?.name || 'payment'
+      } has expired. Please initiate a new payment if you wish to proceed.`;
+
+      // Send push notification
+      if (sender.id) {
+        await this.notificationService.sendPaymentNotification(
+          payment,
+          sender,
+          'PUSH_NOTIFICATION' as any,
+          'Payment Expired ⏰',
+          expirationMessage,
+        );
+      }
+
+      // Send SMS notification
+      if (sender.phone) {
+        const smsMessage = `COPAY: Your payment of ${formatAmount(
+          amount,
+        )} for ${
+          paymentType?.name || 'payment'
+        } has expired after 30 minutes. Please initiate a new payment to proceed.`;
+
+        await this.smsService.sendSms(
+          sender.phone,
+          smsMessage,
+          `payment-expired-${payment.id}`,
+        );
+      }
+
+      this.logger.log(
+        `Expiration notifications sent for payment ${payment.id}`,
+      );
+    } catch (error) {
+      this.logger.error(
+        `Failed to send expiration notification for payment ${payment.id}: ${(error as Error).message}`,
+      );
+      // Don't throw error - notifications are not critical
     }
   }
 }
