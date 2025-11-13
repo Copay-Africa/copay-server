@@ -81,8 +81,15 @@ export class AuthService {
       } = { lastLoginAt: new Date() };
 
       if (fcmToken) {
-        updateData.fcmToken = fcmToken;
-        updateData.fcmTokenUpdatedAt = new Date();
+        if (fcmToken.length > 10 && fcmToken.includes(':')) {
+          updateData.fcmToken = fcmToken;
+          updateData.fcmTokenUpdatedAt = new Date();
+          console.log(`✅ FCM token updated for user ${user.phone}`);
+        } else {
+          console.warn(
+            `⚠️ Invalid FCM token format for user ${user.phone}: ${fcmToken.substring(0, 20)}...`,
+          );
+        }
       }
 
       await this.prismaService.user.update({

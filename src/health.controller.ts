@@ -23,9 +23,14 @@ export class HealthController {
       firebase: {
         configured: !!(
           process.env.FIREBASE_PROJECT_ID &&
-          process.env.FIREBASE_SERVICE_ACCOUNT_KEY
+          process.env.FIREBASE_SERVICE_ACCOUNT_PRIVATE_KEY &&
+          process.env.FIREBASE_SERVICE_ACCOUNT_CLIENT_EMAIL
         ),
         projectId: process.env.FIREBASE_PROJECT_ID || 'not-set',
+        serviceAccountEmail:
+          process.env.FIREBASE_SERVICE_ACCOUNT_CLIENT_EMAIL || 'not-set',
+        privateKeyConfigured:
+          !!process.env.FIREBASE_SERVICE_ACCOUNT_PRIVATE_KEY,
       },
     };
   }
@@ -34,6 +39,9 @@ export class HealthController {
   @Get('config')
   @ApiOperation({ summary: 'Configuration check' })
   getConfig() {
+    const firebaseServiceAccount = this.configService.get(
+      'firebase.serviceAccount',
+    );
     return {
       nodeEnv: this.configService.get('NODE_ENV'),
       port: this.configService.get('PORT'),
@@ -46,11 +54,12 @@ export class HealthController {
         : 'missing',
       firebaseProjectId:
         this.configService.get('firebase.projectId') || 'missing',
-      firebaseServiceAccount: this.configService.get(
-        'firebase.serviceAccountKey',
-      )
-        ? 'configured'
-        : 'missing',
+      firebaseServiceAccount:
+        firebaseServiceAccount && firebaseServiceAccount.private_key
+          ? 'configured'
+          : 'missing',
+      firebaseServiceAccountEmail:
+        firebaseServiceAccount?.client_email || 'missing',
     };
   }
 }

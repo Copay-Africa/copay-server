@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unsafe-assignment */
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as admin from 'firebase-admin';
@@ -37,9 +38,33 @@ export class FcmService {
         'firebase.serviceAccount',
       );
 
-      if (!serviceAccount || !projectId || !serviceAccount.private_key) {
-        console.warn(
-          'Firebase configuration not found. Push notifications will be mocked.',
+      if (
+        !serviceAccount ||
+        !projectId ||
+        !serviceAccount.private_key ||
+        !serviceAccount.client_email
+      ) {
+        console.error(
+          '❌ Firebase configuration incomplete. Required: projectId, private_key, client_email',
+        );
+        this.useMockImplementation = true;
+        return;
+      }
+
+      // Validate service account structure
+      const requiredFields = [
+        'type',
+        'project_id',
+        'private_key',
+        'client_email',
+      ];
+      const missingFields = requiredFields.filter(
+        (field) => !serviceAccount[field],
+      );
+
+      if (missingFields.length > 0) {
+        console.error(
+          `❌ Firebase service account missing fields: ${missingFields.join(', ')}`,
         );
         this.useMockImplementation = true;
         return;
@@ -55,12 +80,15 @@ export class FcmService {
       }
 
       this.isFirebaseInitialized = true;
-      console.log(`Firebase Admin SDK initialized for project: ${projectId}`);
+      console.log(
+        `✅ Firebase Admin SDK initialized successfully for project: ${projectId}`,
+      );
     } catch (error) {
       console.error(
-        'Failed to initialize Firebase Admin SDK:',
+        '❌ Failed to initialize Firebase Admin SDK:',
         error instanceof Error ? error.message : 'Unknown error',
       );
+      console.error('Error details:', error);
       this.useMockImplementation = true;
     }
   }
@@ -125,8 +153,6 @@ export class FcmService {
         messageId: response,
       };
     } catch (error) {
-      console.error('Push notification send error:', error.message);
-
       return {
         success: false,
         error: error.message,
@@ -196,7 +222,6 @@ export class FcmService {
       return true;
     } catch (error) {
       console.error('FCM token validation error:', error.message);
-      // Invalid tokens will throw errors, so return false
       return false;
     }
   }

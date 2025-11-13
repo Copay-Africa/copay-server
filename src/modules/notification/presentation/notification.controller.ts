@@ -7,6 +7,7 @@ import {
   UseGuards,
   DefaultValuePipe,
   ParseIntPipe,
+  Body,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -17,10 +18,7 @@ import {
   ApiParam,
 } from '@nestjs/swagger';
 import { NotificationService } from '../application/notification.service';
-import {
-  NotificationResponseDto,
-  InAppNotificationsResponseDto,
-} from './dto/notification.dto';
+import { InAppNotificationsResponseDto } from './dto/notification.dto';
 import { JwtAuthGuard } from '../../../shared/guards/jwt-auth.guard';
 import { CurrentUser } from '../../../shared/decorators/current-user.decorator';
 import { AuthenticatedUser } from '../../../shared/decorators/current-user.decorator';
