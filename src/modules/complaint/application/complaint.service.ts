@@ -10,8 +10,14 @@ import { UpdateComplaintStatusDto } from '../presentation/dto/update-complaint-s
 import { ComplaintFilterDto } from '../presentation/dto/complaint-filter.dto';
 import { ComplaintResponseDto } from '../presentation/dto/complaint-response.dto';
 import { PaginatedResponseDto } from '../../../shared/dto/paginated-response.dto';
-import { ComplaintStatus, ComplaintPriority, UserRole } from '@prisma/client';
+import {
+  ComplaintStatus,
+  ComplaintPriority,
+  UserRole,
+  NotificationType,
+} from '@prisma/client';
 import { ActivityService } from '../../activity/application/activity.service';
+import { NotificationService } from '../../notification/application/notification.service';
 
 export interface ComplaintContext {
   userId: string;
@@ -24,6 +30,7 @@ export class ComplaintService {
   constructor(
     private prismaService: PrismaService,
     private activityService: ActivityService,
+    private notificationService: NotificationService,
   ) {}
 
   async createComplaint(
@@ -377,6 +384,13 @@ export class ComplaintService {
       },
     );
 
+    // Send notifications when complaint is completed
+    await this.sendComplaintCompletionNotification(
+      updatedComplaint,
+      existingComplaint.status,
+      updateStatusDto.status,
+    );
+
     return this.mapToResponseDto(updatedComplaint);
   }
 
@@ -479,6 +493,116 @@ export class ComplaintService {
         createdAt: complaint.createdAt,
       })),
     };
+  }
+
+  /**
+   * Send notifications when a complaint is completed (RESOLVED or CLOSED)
+   */
+  private async sendComplaintCompletionNotification(
+    complaint: any,
+    oldStatus: ComplaintStatus,
+    newStatus: ComplaintStatus,
+  ): Promise<void> {
+    // Only send notifications when complaint is being completed
+    const isCompleted =
+      newStatus === ComplaintStatus.RESOLVED ||
+      newStatus === ComplaintStatus.CLOSED;
+    const wasNotCompleted =
+      oldStatus !== ComplaintStatus.RESOLVED &&
+      oldStatus !== ComplaintStatus.CLOSED;
+
+    if (!isCompleted || !wasNotCompleted) {
+      return; // Not a completion event
+    }
+
+    try {
+      console.log(
+        `🔔 Sending completion notifications for complaint ${complaint.id}`,
+      );
+
+      // Get the complaint user (who filed the complaint)
+      const complaintUser = await this.prismaService.user.findUnique({
+        where: { id: complaint.userId },
+        select: {
+          id: true,
+          firstName: true,
+          lastName: true,
+          phone: true,
+          email: true,
+          fcmToken: true,
+        },
+      });
+
+      if (!complaintUser) {
+        console.warn(`User not found for complaint ${complaint.id}`);
+        return;
+      }
+
+      // Build notification content
+      const { title, message } = this.buildCompletionNotificationContent(
+        complaint,
+        newStatus,
+      );
+
+      // Define notification types to send (both push and in-app)
+      const notificationTypes: NotificationType[] = [
+        NotificationType.IN_APP,
+        NotificationType.PUSH_NOTIFICATION,
+      ];
+
+      // Add SMS if user has phone number
+      if (complaintUser.phone) {
+        notificationTypes.push(NotificationType.SMS);
+      }
+
+      // Send notifications
+      await this.notificationService.sendComplaintNotification(
+        complaint,
+        complaintUser,
+        notificationTypes,
+        title,
+        message,
+      );
+
+      console.log(
+        `✅ Completion notifications sent successfully for complaint ${complaint.id}`,
+      );
+    } catch (error) {
+      console.error(
+        `❌ Failed to send completion notifications for complaint ${complaint.id}:`,
+        error.message,
+      );
+    }
+  }
+
+  /**
+   * Build notification content for complaint completion
+   */
+  private buildCompletionNotificationContent(
+    complaint: any,
+    status: ComplaintStatus,
+  ): { title: string; message: string } {
+    const statusText = status === ComplaintStatus.RESOLVED ? 'resolved' : 'closed';
+    const statusEmoji = status === ComplaintStatus.RESOLVED ? '✅' : '🔒';
+
+    const title = `${statusEmoji} Complaint ${statusText.charAt(0).toUpperCase() + statusText.slice(1)}`;
+    
+    let message = `Your complaint "${complaint.title}" has been ${statusText}.`;
+
+    // Add resolution if provided
+    if (complaint.resolution && status === ComplaintStatus.RESOLVED) {
+      message += `\\n\\nResolution: ${complaint.resolution}`;
+    }
+
+    // Add completion time
+    if (complaint.resolvedAt) {
+      const resolvedDate = new Date(complaint.resolvedAt).toLocaleDateString();
+      message += `\\n\\nCompleted on: ${resolvedDate}`;
+    }
+
+    message += '\\n\\nThank you for your patience!';
+
+    return { title, message };
   }
 
   private mapToResponseDto(complaint: any): ComplaintResponseDto {

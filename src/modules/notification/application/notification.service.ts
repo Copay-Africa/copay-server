@@ -16,6 +16,7 @@ export interface NotificationContext {
   cooperativeId?: string;
   reminderId?: string;
   paymentId?: string;
+  complaintId?: string;
 }
 
 @Injectable()
@@ -75,6 +76,39 @@ export class NotificationService {
     await this.sendNotification(notificationType, contentData, user, context);
   }
 
+  async sendComplaintNotification(
+    complaint: any,
+    user: any,
+    notificationTypes: NotificationType[],
+    title: string,
+    message: string,
+  ): Promise<void> {
+    const context: NotificationContext = {
+      userId: user.id,
+      cooperativeId: complaint.cooperativeId,
+      complaintId: complaint.id,
+    };
+
+    for (const type of notificationTypes) {
+      try {
+        await this.sendNotification(
+          type,
+          { title, message, complaint },
+          user,
+          context,
+        );
+        console.log(
+          `✅ ${type} notification sent for complaint ${complaint.id}`,
+        );
+      } catch (error) {
+        console.error(
+          `❌ Failed to send ${type} notification for complaint ${complaint.id}:`,
+          error.message,
+        );
+      }
+    }
+  }
+
   private async sendNotification(
     type: NotificationType,
     contentData: any,
@@ -92,18 +126,32 @@ export class NotificationService {
     }
 
     // Create notification record
+    const notificationData: any = {
+      type,
+      status: NotificationStatus.PENDING,
+      title,
+      message,
+      userId: context.userId,
+      cooperativeId: context.cooperativeId,
+      recipient,
+    };
+
+    // Add related entity IDs
+    if (context.reminderId) {
+      notificationData.reminderId = context.reminderId;
+    }
+    if (context.paymentId) {
+      notificationData.paymentId = context.paymentId;
+    }
+    // Note: complaintId would require schema update, using metadata for now
+    if (context.complaintId) {
+      notificationData.metadata = {
+        complaintId: context.complaintId,
+      };
+    }
+
     const notification = await this.prismaService.notification.create({
-      data: {
-        type,
-        status: NotificationStatus.PENDING,
-        title,
-        message,
-        userId: context.userId,
-        cooperativeId: context.cooperativeId,
-        reminderId: context.reminderId,
-        paymentId: context.paymentId,
-        recipient,
-      },
+      data: notificationData,
     });
 
     try {
@@ -209,8 +257,11 @@ export class NotificationService {
       body: message,
       data: {
         notificationId: notification.id,
-        type: 'reminder',
+        type: notification.metadata?.complaintId ? 'complaint' : 'reminder',
         userId: user.id,
+        ...(notification.metadata?.complaintId && {
+          complaintId: notification.metadata.complaintId,
+        }),
       },
     };
 
