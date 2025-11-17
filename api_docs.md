@@ -10,6 +10,7 @@
    - [User Management](#user-management)
    - [Account Requests](#account-requests)
    - [Cooperatives](#cooperatives)
+   - [Cooperative Categories](#cooperative-categories)
    - [Payment Types (Public)](#payment-types-public)
    - [Payments](#payments)
    - [Activities](#activities)
@@ -635,6 +636,216 @@ Each cooperative can now define billing periods to control payment frequency and
 #### Get Cooperative by ID
 
 **GET** `/cooperatives/:id`
+
+---
+
+### Cooperative Categories
+
+#### Overview
+
+Cooperative categories allow administrators to organize cooperatives into predefined types such as Residential Apartments, Business Complexes, Coworking Spaces, etc. This feature provides better organization, analytics, and visual categorization.
+
+#### Create Cooperative Category
+
+**POST** `/cooperative-categories`
+
+**Required Roles:** `SUPER_ADMIN`
+
+```json
+{
+  "name": "Residential Apartment",
+  "description": "Residential apartment complexes and housing cooperatives",
+  "icon": "🏠",
+  "color": "#3B82F6",
+  "isActive": true,
+  "sortOrder": 1
+}
+```
+
+**Response:**
+```json
+{
+  "id": "64a1b2c3d4e5f6789abcdef0",
+  "name": "Residential Apartment",
+  "description": "Residential apartment complexes and housing cooperatives",
+  "icon": "🏠",
+  "color": "#3B82F6",
+  "isActive": true,
+  "sortOrder": 1,
+  "cooperativeCount": 0,
+  "createdAt": "2023-11-17T10:30:00.000Z",
+  "updatedAt": "2023-11-17T10:30:00.000Z"
+}
+```
+
+#### Get All Categories
+
+**GET** `/cooperative-categories`
+
+**Required Roles:** `SUPER_ADMIN`, `ORGANIZATION_ADMIN`
+
+**Query Parameters:**
+- `page` (optional): Page number (default: 1)
+- `limit` (optional): Items per page (default: 10)
+- `search` (optional): Search term for name or description
+- `isActive` (optional): Filter by active status (true/false)
+- `sortBy` (optional): Sort field (name, createdAt, updatedAt, sortOrder, cooperativeCount)
+- `sortOrder` (optional): Sort direction (asc, desc)
+
+**Example Request:**
+```
+GET /cooperative-categories?page=1&limit=10&search=apartment&isActive=true&sortBy=name&sortOrder=asc
+```
+
+**Response:**
+```json
+{
+  "data": [
+    {
+      "id": "64a1b2c3d4e5f6789abcdef0",
+      "name": "Residential Apartment",
+      "description": "Residential apartment complexes and housing cooperatives",
+      "icon": "🏠",
+      "color": "#3B82F6",
+      "isActive": true,
+      "sortOrder": 1,
+      "cooperativeCount": 15,
+      "createdAt": "2023-11-17T10:30:00.000Z",
+      "updatedAt": "2023-11-17T10:30:00.000Z"
+    }
+  ],
+  "total": 1,
+  "page": 1,
+  "limit": 10,
+  "totalPages": 1
+}
+```
+
+#### Get Category Statistics
+
+**GET** `/cooperative-categories/stats`
+
+**Required Roles:** `SUPER_ADMIN`
+
+**Response:**
+```json
+{
+  "totalCategories": 8,
+  "activeCategories": 7,
+  "inactiveCategories": 1,
+  "totalCooperatives": 45,
+  "categoriesWithCooperatives": 5,
+  "topCategories": [
+    {
+      "id": "64a1b2c3d4e5f6789abcdef0",
+      "name": "Residential Apartment",
+      "cooperativeCount": 20
+    },
+    {
+      "id": "64a1b2c3d4e5f6789abcdef1",
+      "name": "Business Complex",
+      "cooperativeCount": 15
+    }
+  ]
+}
+```
+
+#### Get Category by ID
+
+**GET** `/cooperative-categories/:id`
+
+**Required Roles:** `SUPER_ADMIN`, `ORGANIZATION_ADMIN`
+
+**Response:**
+```json
+{
+  "id": "64a1b2c3d4e5f6789abcdef0",
+  "name": "Residential Apartment",
+  "description": "Residential apartment complexes and housing cooperatives",
+  "icon": "🏠",
+  "color": "#3B82F6",
+  "isActive": true,
+  "sortOrder": 1,
+  "cooperativeCount": 15,
+  "createdAt": "2023-11-17T10:30:00.000Z",
+  "updatedAt": "2023-11-17T10:30:00.000Z"
+}
+```
+
+#### Update Category
+
+**PATCH** `/cooperative-categories/:id`
+
+**Required Roles:** `SUPER_ADMIN`
+
+```json
+{
+  "name": "Updated Residential Apartment",
+  "description": "Updated description",
+  "color": "#FF5733",
+  "isActive": false
+}
+```
+
+**Response:** Same as Get Category by ID
+
+#### Reorder Categories
+
+**PATCH** `/cooperative-categories/reorder`
+
+**Required Roles:** `SUPER_ADMIN`
+
+```json
+[
+  { "id": "64a1b2c3d4e5f6789abcdef0", "sortOrder": 1 },
+  { "id": "64a1b2c3d4e5f6789abcdef1", "sortOrder": 2 },
+  { "id": "64a1b2c3d4e5f6789abcdef2", "sortOrder": 3 }
+]
+```
+
+**Response:**
+```json
+{
+  "message": "Category order updated successfully"
+}
+```
+
+#### Delete Category
+
+**DELETE** `/cooperative-categories/:id`
+
+**Required Roles:** `SUPER_ADMIN`
+
+**Response:**
+```json
+{
+  "message": "Category \"Residential Apartment\" has been successfully deleted"
+}
+```
+
+**Error Response (if category has assigned cooperatives):**
+```json
+{
+  "statusCode": 400,
+  "message": "Cannot delete category. 15 cooperative(s) are assigned to this category. Please reassign or remove cooperatives before deleting the category.",
+  "error": "Bad Request"
+}
+```
+
+#### Predefined Categories
+
+The system comes with 8 predefined categories:
+
+| Category | Icon | Color | Description |
+|----------|------|--------|-------------|
+| Residential Apartment | 🏠 | #3B82F6 | Residential apartment complexes and housing cooperatives |
+| Business Complex | 🏢 | #10B981 | Commercial buildings and business centers |
+| Coworking Space | 💼 | #F59E0B | Shared workspaces and coworking facilities |
+| Student Housing | 🎓 | #8B5CF6 | Student dormitories and residential facilities |
+| Mixed Use | 🏘️ | #EF4444 | Properties with both residential and commercial use |
+| Industrial | 🏭 | #6B7280 | Warehouses, factories, and industrial facilities |
+| Retail | 🛍️ | #EC4899 | Shopping centers and retail complexes |
+| Hospitality | 🏨 | #06B6D4 | Hotels, hostels, and hospitality services |
 
 ---
 

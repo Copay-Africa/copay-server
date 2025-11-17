@@ -18,6 +18,7 @@ import { ReminderModule } from './modules/reminder/reminder.module';
 import { ComplaintModule } from './modules/complaint/complaint.module';
 import { NotificationModule } from './modules/notification/notification.module';
 import { AnnouncementModule } from './modules/announcement/announcement.module';
+import { CooperativeCategoryModule } from './modules/cooperative-category/cooperative-category.module';
 import { JwtAuthGuard } from './shared/guards/jwt-auth.guard';
 import { CacheConfigModule } from './config/cache.module';
 import {
@@ -82,6 +83,7 @@ import {
     AuthModule,
     UserModule,
     CooperativeModule,
+    CooperativeCategoryModule,
     PaymentModule,
     UssdModule,
     SmsModule,

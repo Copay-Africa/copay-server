@@ -5,6 +5,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { PaymentTypeService } from './application/payment-type.service';
 import { PaymentService } from './application/payment.service';
 import { PaymentPeriodService } from './application/payment-period.service';
+import { BalanceService } from './application/balance.service';
 
 // Infrastructure Services
 import { PaymentCacheService } from './infrastructure/payment-cache.service';
@@ -14,6 +15,7 @@ import { IrremboPayGateway } from './infrastructure/irembopay.gateway';
 // Controllers
 import { PaymentTypeController } from './presentation/payment-type.controller';
 import { PaymentController } from './presentation/payment.controller';
+import { BalanceController } from './presentation/balance.controller';
 
 // Activity Module
 import { ActivityModule } from '../activity/activity.module';
@@ -22,7 +24,7 @@ import { SmsModule } from '../sms/sms.module';
 
 @Module({
   imports: [ActivityModule, NotificationModule, SmsModule],
-  controllers: [PaymentTypeController, PaymentController],
+  controllers: [PaymentTypeController, PaymentController, BalanceController],
   providers: [
     // Core Services
     PrismaService,
@@ -31,6 +33,7 @@ import { SmsModule } from '../sms/sms.module';
     PaymentTypeService,
     PaymentService,
     PaymentPeriodService,
+    BalanceService,
 
     // Infrastructure Services
     PaymentCacheService,
@@ -42,6 +45,7 @@ import { SmsModule } from '../sms/sms.module';
     PaymentService,
     PaymentCacheService,
     PaymentGatewayFactory,
+    BalanceService,
   ],
 })
 export class PaymentModule {}

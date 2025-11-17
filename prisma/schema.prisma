@@ -160,7 +160,46 @@ enum PaymentFrequency {
   YEARLY
 }
 
+enum BalanceTransactionType {
+  CREDIT_FROM_PAYMENT // Credit from successful payment
+  DEBIT_WITHDRAWAL    // Debit for withdrawal/transfer
+  CREDIT_ADJUSTMENT   // Manual credit adjustment
+  DEBIT_ADJUSTMENT    // Manual debit adjustment
+  FEE_COLLECTION      // Fee collection (CoPay profit)
+  REFUND              // Payment refund
+}
+
+enum BalanceTransactionStatus {
+  PENDING     // Transaction initiated but not processed
+  PROCESSING  // Transaction being processed
+  COMPLETED   // Transaction completed successfully
+  FAILED      // Transaction failed
+  CANCELLED   // Transaction cancelled
+  REVERSED    // Transaction reversed/refunded
+}
+
 // Models
+model CooperativeCategory {
+  id          String @id @default(auto()) @map("_id") @db.ObjectId
+  name        String @unique
+  description String?
+  icon        String? // Icon name or emoji for UI representation
+  color       String? // Hex color code for UI theming
+  
+  // Settings
+  isActive    Boolean @default(true)
+  sortOrder   Int?    // For custom ordering in UI
+  
+  // Relationships
+  cooperatives Cooperative[]
+  
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  @@map("cooperative_categories")
+}
+
 model Cooperative {
   id          String            @id @default(auto()) @map("_id") @db.ObjectId
   name        String
@@ -170,6 +209,10 @@ model Cooperative {
   phone       String?
   email       String?
   status      CooperativeStatus @default(PENDING_APPROVAL)
+  
+  // Category relationship
+  categoryId  String?             @db.ObjectId
+  category    CooperativeCategory? @relation(fields: [categoryId], references: [id])
   
   // Payment frequency settings
   paymentFrequency PaymentFrequency @default(MONTHLY)
@@ -190,6 +233,7 @@ model Cooperative {
   reminders           Reminder[]
   notifications       Notification[]
   announcements       Announcement[]
+  balance             CooperativeBalance?
 
   // Timestamps
   createdAt DateTime @default(now())
@@ -278,7 +322,13 @@ model PaymentType {
 
 model Payment {
   id          String        @id @default(auto()) @map("_id") @db.ObjectId
-  amount      Float
+  
+  // Enhanced fee structure
+  baseAmount  Float         // Original payment amount before fees
+  fee         Float         @default(500) // Transaction fee (500 RWF fixed)
+  amount      Float         // Total amount (baseAmount + fee) - for backward compatibility
+  totalPaid   Float         // Total amount paid (baseAmount + fee)
+  
   status      PaymentStatus @default(PENDING)
   description String?
   dueDate     DateTime?
@@ -312,6 +362,10 @@ model Payment {
   isGroupPayment   Boolean @default(false)
   groupPaymentData Json? // Store group payment details
 
+  // Balance tracking flags
+  cooperativeBalanceUpdated Boolean @default(false) // Track if cooperative balance was credited
+  feeBalanceUpdated         Boolean @default(false) // Track if CoPay fee was credited
+
   // Transactions
   transactions  PaymentTransaction[]
   notifications Notification[]
@@ -322,6 +376,95 @@ model Payment {
   updatedAt DateTime  @updatedAt
 
   @@map("payments")
+}
+
+model CooperativeBalance {
+  id            String @id @default(auto()) @map("_id") @db.ObjectId
+  cooperativeId String @unique @db.ObjectId
+  cooperative   Cooperative @relation(fields: [cooperativeId], references: [id])
+  
+  // Balance tracking
+  currentBalance   Float @default(0) // Current available balance
+  totalReceived    Float @default(0) // Total amount received from payments
+  totalWithdrawn   Float @default(0) // Total amount withdrawn/transferred
+  pendingBalance   Float @default(0) // Payments that are processing but not yet settled
+  
+  // Metadata
+  lastPaymentAt    DateTime? // Last time balance was updated from payment
+  lastWithdrawalAt DateTime? // Last time funds were withdrawn
+  
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  // Relationships
+  transactions BalanceTransaction[]
+  
+  @@map("cooperative_balances")
+}
+
+model CopayBalance {
+  id String @id @default(auto()) @map("_id") @db.ObjectId
+  
+  // Balance tracking (global CoPay profit)
+  currentBalance Float @default(0) // Current fee profit balance
+  totalFees      Float @default(0) // Total fees collected
+  totalWithdrawn Float @default(0) // Total fees withdrawn
+  
+  // Performance metrics
+  totalTransactions   Int     @default(0) // Total number of fee transactions
+  averageFeePerMonth  Float   @default(0) // Average monthly fee collection
+  lastCalculatedAt    DateTime? // When averages were last calculated
+  
+  // Metadata
+  lastFeeAt         DateTime? // Last time fee was collected
+  lastWithdrawalAt  DateTime? // Last time profit was withdrawn
+  
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  // Relationships
+  transactions BalanceTransaction[]
+  
+  @@map("copay_balance")
+}
+
+model BalanceTransaction {
+  id     String            @id @default(auto()) @map("_id") @db.ObjectId
+  type   BalanceTransactionType
+  amount Float
+  
+  // Description and reference
+  description      String
+  referenceId      String? // Payment ID, withdrawal ID, etc.
+  externalReference String? // Bank transfer reference, etc.
+  
+  // Cooperative balance (optional - for cooperative-specific transactions)
+  cooperativeBalanceId String?             @db.ObjectId
+  cooperativeBalance   CooperativeBalance? @relation(fields: [cooperativeBalanceId], references: [id])
+  
+  // CoPay balance (optional - for fee-related transactions)
+  copayBalanceId String?      @db.ObjectId
+  copayBalance   CopayBalance? @relation(fields: [copayBalanceId], references: [id])
+  
+  // Administrative tracking
+  processedBy String? // Admin user who processed withdrawal
+  approvedBy  String? // Admin user who approved withdrawal
+  
+  // Status and processing
+  status        BalanceTransactionStatus @default(PENDING)
+  processedAt   DateTime?
+  failureReason String?
+  
+  // Metadata
+  metadata Json?
+  
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  @@map("balance_transactions")
 }
 
 model PaymentTransaction {

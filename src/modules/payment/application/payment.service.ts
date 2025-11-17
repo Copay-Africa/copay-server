@@ -24,6 +24,7 @@ import {
   PaymentPeriodService,
   PaymentFrequency,
 } from './payment-period.service';
+import { BalanceService } from './balance.service';
 
 @Injectable()
 export class PaymentService {
@@ -37,6 +38,7 @@ export class PaymentService {
     private notificationService: NotificationService,
     private smsService: SmsService,
     private paymentPeriodService: PaymentPeriodService,
+    private balanceService: BalanceService,
   ) {}
 
   async initiatePayment(
@@ -150,10 +152,23 @@ export class PaymentService {
       );
     }
 
+    // Calculate payment amounts with fee
+    const paymentCalculation = this.balanceService.calculateTotalAmount(
+      initiatePaymentDto.amount,
+    );
+
+    this.logger.log(`Payment calculation for ${initiatePaymentDto.amount} RWF:`);
+    this.logger.log(`- Base amount: ${paymentCalculation.baseAmount} RWF`);
+    this.logger.log(`- Fee: ${paymentCalculation.fee} RWF`);
+    this.logger.log(`- Total: ${paymentCalculation.totalPaid} RWF`);
+
     // Create payment record
     const payment = await this.prismaService.payment.create({
       data: {
-        amount: initiatePaymentDto.amount,
+        baseAmount: paymentCalculation.baseAmount,
+        fee: paymentCalculation.fee,
+        amount: paymentCalculation.totalPaid, // For backward compatibility
+        totalPaid: paymentCalculation.totalPaid,
         status: PaymentStatus.PENDING,
         description: initiatePaymentDto.description,
         dueDate: initiatePaymentDto.dueDate
@@ -166,6 +181,8 @@ export class PaymentService {
         cooperativeId,
         senderId,
         isGroupPayment: false,
+        cooperativeBalanceUpdated: false,
+        feeBalanceUpdated: false,
       },
       include: {
         paymentType: {
@@ -206,7 +223,7 @@ export class PaymentService {
 
       // Prepare gateway request
       const gatewayRequest = {
-        amount: initiatePaymentDto.amount,
+        amount: paymentCalculation.totalPaid, // Use total amount including fees for IremboPay invoice
         currency: 'RWF',
         paymentMethod: initiatePaymentDto.paymentMethod,
         paymentAccount: initiatePaymentDto.paymentAccount,
@@ -237,7 +254,7 @@ export class PaymentService {
           {
             data: {
               paymentId: payment.id,
-              amount: initiatePaymentDto.amount,
+              amount: paymentCalculation.totalPaid, // Use total amount for transaction tracking
               status: gatewayResponse.success
                 ? PaymentStatus.PENDING
                 : PaymentStatus.FAILED,
@@ -1287,7 +1304,10 @@ export class PaymentService {
   private mapToResponseDto(payment: any): PaymentResponseDto {
     return {
       id: payment.id,
+      baseAmount: payment.baseAmount,
+      fee: payment.fee,
       amount: payment.amount,
+      totalPaid: payment.totalPaid,
       status: payment.status,
       description: payment.description,
       dueDate: payment.dueDate,
@@ -1409,6 +1429,18 @@ export class PaymentService {
           userId: payment.senderId,
           cooperativeId: payment.cooperativeId,
         });
+
+        // Process balance redistribution after successful payment
+        try {
+          await this.balanceService.processPaymentSettlement(payment.id);
+          this.logger.log(`Balance redistribution completed for payment ${payment.id}`);
+        } catch (error) {
+          this.logger.error(
+            `Failed to process balance redistribution for payment ${payment.id}: ${(error as Error).message}`,
+          );
+          // Note: We don't throw here to avoid breaking the webhook flow
+          // Balance redistribution can be retried later if needed
+        }
       } else if (webhookDto.status === PaymentStatus.FAILED) {
         await this.activityService.logPaymentFailed(
           payment.id,

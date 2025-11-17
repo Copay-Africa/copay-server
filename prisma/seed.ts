@@ -5,6 +5,7 @@ import {
   CooperativeStatus,
 } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
+import { seedCooperativeCategories } from '../src/modules/cooperative-category/cooperative-category.seed';
 
 const prisma = new PrismaClient();
 
@@ -171,6 +172,9 @@ async function main() {
     });
     console.log('✅ Created payment type:', paymentType.name);
   }
+
+  // Seed cooperative categories
+  await seedCooperativeCategories(prisma);
 
   console.log('🎉 Seed completed successfully!');
 }

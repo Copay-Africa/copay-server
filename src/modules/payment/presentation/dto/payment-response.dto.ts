@@ -9,10 +9,28 @@ export class PaymentResponseDto {
   id: string;
 
   @ApiProperty({
-    description: 'Payment amount',
+    description: 'Base payment amount (before fees)',
     example: 50000,
   })
+  baseAmount: number;
+
+  @ApiProperty({
+    description: 'Transaction fee',
+    example: 500,
+  })
+  fee: number;
+
+  @ApiProperty({
+    description: 'Total payment amount (baseAmount + fee)',
+    example: 50500,
+  })
   amount: number;
+
+  @ApiProperty({
+    description: 'Total amount paid (same as amount)',
+    example: 50500,
+  })
+  totalPaid: number;
 
   @ApiProperty({
     description: 'Payment status',
