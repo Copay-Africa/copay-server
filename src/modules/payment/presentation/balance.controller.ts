@@ -1,8 +1,10 @@
 import {
   Controller,
   Get,
+  Post,
   Query,
   Param,
+  Body,
   UseGuards,
   BadRequestException,
 } from '@nestjs/common';
@@ -13,6 +15,7 @@ import {
   ApiBearerAuth,
   ApiParam,
   ApiQuery,
+  ApiBody,
 } from '@nestjs/swagger';
 import { BalanceService } from '../application/balance.service';
 import {
@@ -37,9 +40,10 @@ export class BalanceController {
 
   @Get('overview')
   @Roles(UserRole.SUPER_ADMIN)
-  @ApiOperation({ 
+  @ApiOperation({
     summary: 'Get global balance overview',
-    description: 'Get comprehensive balance statistics for admin dashboard (Super Admin only)'
+    description:
+      'Get comprehensive balance statistics for admin dashboard (Super Admin only)',
   })
   @ApiResponse({
     status: 200,
@@ -52,9 +56,10 @@ export class BalanceController {
 
   @Get('cooperative/:cooperativeId')
   @Roles(UserRole.SUPER_ADMIN, UserRole.ORGANIZATION_ADMIN)
-  @ApiOperation({ 
+  @ApiOperation({
     summary: 'Get cooperative balance details',
-    description: 'Get balance information and statistics for a specific cooperative'
+    description:
+      'Get balance information and statistics for a specific cooperative',
   })
   @ApiParam({
     name: 'cooperativeId',
@@ -70,8 +75,13 @@ export class BalanceController {
     @CurrentUser() user: AuthenticatedUser,
   ) {
     // Organization admins can only view their own cooperative balance
-    if (user.role === UserRole.ORGANIZATION_ADMIN && user.cooperativeId !== cooperativeId) {
-      throw new BadRequestException('You can only view your own cooperative balance');
+    if (
+      user.role === UserRole.ORGANIZATION_ADMIN &&
+      user.cooperativeId !== cooperativeId
+    ) {
+      throw new BadRequestException(
+        'You can only view your own cooperative balance',
+      );
     }
 
     return this.balanceService.getCooperativeBalanceStats(cooperativeId);
@@ -79,9 +89,10 @@ export class BalanceController {
 
   @Get('copay')
   @Roles(UserRole.SUPER_ADMIN)
-  @ApiOperation({ 
+  @ApiOperation({
     summary: 'Get CoPay profit balance',
-    description: 'Get CoPay fee collection balance and statistics (Super Admin only)'
+    description:
+      'Get CoPay fee collection balance and statistics (Super Admin only)',
   })
   @ApiResponse({
     status: 200,
@@ -92,9 +103,9 @@ export class BalanceController {
   }
 
   @Get('calculate')
-  @ApiOperation({ 
+  @ApiOperation({
     summary: 'Calculate payment with fees',
-    description: 'Calculate total payment amount including transaction fees'
+    description: 'Calculate total payment amount including transaction fees',
   })
   @ApiQuery({
     name: 'amount',
@@ -111,7 +122,7 @@ export class BalanceController {
     @Query('amount') amount: string,
   ): Promise<PaymentCalculationDto> {
     const baseAmount = parseFloat(amount);
-    
+
     if (isNaN(baseAmount) || baseAmount <= 0) {
       throw new BadRequestException('Valid amount is required');
     }
@@ -121,9 +132,9 @@ export class BalanceController {
 
   @Get('cooperatives')
   @Roles(UserRole.SUPER_ADMIN)
-  @ApiOperation({ 
+  @ApiOperation({
     summary: 'List all cooperative balances',
-    description: 'Get summary of all cooperative balances (Super Admin only)'
+    description: 'Get summary of all cooperative balances (Super Admin only)',
   })
   @ApiResponse({
     status: 200,
@@ -136,5 +147,190 @@ export class BalanceController {
       message: 'Feature coming soon - List all cooperative balances',
       note: 'Use the global overview endpoint for now',
     };
+  }
+
+  // Balance Redistribution Endpoints
+
+  @Post('redistribute/payment/:paymentId')
+  @Roles(UserRole.SUPER_ADMIN)
+  @ApiOperation({
+    summary: 'Redistribute balance for specific payment',
+    description:
+      'Manually trigger balance redistribution for a payment (Super Admin only)',
+  })
+  @ApiParam({
+    name: 'paymentId',
+    description: 'Payment ID to redistribute balance for',
+    example: '507f1f77bcf86cd799439011',
+  })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        force: {
+          type: 'boolean',
+          description: 'Force redistribution even if already processed',
+          default: false,
+        },
+      },
+    },
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Balance redistribution completed successfully',
+    schema: {
+      type: 'object',
+      properties: {
+        success: { type: 'boolean' },
+        paymentId: { type: 'string' },
+        cooperativeBalanceUpdated: { type: 'boolean' },
+        feeBalanceUpdated: { type: 'boolean' },
+        message: { type: 'string' },
+      },
+    },
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Payment not found',
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Payment not eligible for redistribution',
+  })
+  async redistributePayment(
+    @Param('paymentId') paymentId: string,
+    @Body() body: { force?: boolean },
+  ) {
+    return this.balanceService.redistributePaymentBalance(
+      paymentId,
+      body.force || false,
+    );
+  }
+
+  @Post('redistribute/batch')
+  @Roles(UserRole.SUPER_ADMIN)
+  @ApiOperation({
+    summary: 'Batch redistribute balances',
+    description:
+      'Process balance redistribution for multiple payments (Super Admin only)',
+  })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        paymentIds: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Array of payment IDs to process',
+        },
+        cooperativeId: {
+          type: 'string',
+          description:
+            'Process all pending payments for specific cooperative (optional)',
+        },
+        force: {
+          type: 'boolean',
+          description: 'Force redistribution even if already processed',
+          default: false,
+        },
+        maxCount: {
+          type: 'number',
+          description: 'Maximum number of payments to process (max 100)',
+          default: 50,
+        },
+      },
+    },
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Batch redistribution completed',
+    schema: {
+      type: 'object',
+      properties: {
+        totalProcessed: { type: 'number' },
+        successful: { type: 'number' },
+        failed: { type: 'number' },
+        results: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              paymentId: { type: 'string' },
+              success: { type: 'boolean' },
+              message: { type: 'string' },
+            },
+          },
+        },
+      },
+    },
+  })
+  async batchRedistribute(
+    @Body()
+    batchDto: {
+      paymentIds?: string[];
+      cooperativeId?: string;
+      force?: boolean;
+      maxCount?: number;
+    },
+  ) {
+    return this.balanceService.batchRedistributeBalances(batchDto);
+  }
+
+  @Get('redistribute/pending')
+  @Roles(UserRole.SUPER_ADMIN)
+  @ApiOperation({
+    summary: 'Get pending redistribution payments',
+    description:
+      'List payments that need balance redistribution (Super Admin only)',
+  })
+  @ApiQuery({
+    name: 'limit',
+    type: Number,
+    required: false,
+    description: 'Maximum number of results (max 100)',
+    example: 50,
+  })
+  @ApiQuery({
+    name: 'cooperativeId',
+    type: String,
+    required: false,
+    description: 'Filter by cooperative ID',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Pending redistribution payments retrieved',
+    schema: {
+      type: 'object',
+      properties: {
+        pendingPayments: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              paymentId: { type: 'string' },
+              baseAmount: { type: 'number' },
+              fee: { type: 'number' },
+              cooperativeBalanceUpdated: { type: 'boolean' },
+              feeBalanceUpdated: { type: 'boolean' },
+              cooperativeName: { type: 'string' },
+              createdAt: { type: 'string', format: 'date-time' },
+            },
+          },
+        },
+        totalPending: { type: 'number' },
+        totalPendingAmount: { type: 'number' },
+        totalPendingFees: { type: 'number' },
+      },
+    },
+  })
+  async getPendingRedistributions(
+    @Query('limit') limit?: string,
+    @Query('cooperativeId') cooperativeId?: string,
+  ) {
+    const maxLimit = limit ? Math.min(parseInt(limit), 100) : 50;
+    return this.balanceService.getPendingRedistributions(
+      maxLimit,
+      cooperativeId,
+    );
   }
 }

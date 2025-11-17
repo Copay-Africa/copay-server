@@ -1570,6 +1570,317 @@ curl -X GET "https://api.copay.com/payments/organization/stats?fromDate=2025-10-
 
 ---
 
+### Balance Redistribution (Admin)
+
+The Balance Redistribution API provides manual balance management and redistribution capabilities for administrators to handle payment balance corrections and legacy payment updates.
+
+#### Single Payment Redistribution
+
+**POST** `/balance/redistribute/payment/:id` 🔒 *Admin Only*
+
+**Required Roles:** `ORGANIZATION_ADMIN`, `SUPER_ADMIN`
+
+**Description:** Manually redistribute balance for a specific payment. This endpoint recalculates and redistributes payment fees between cooperative balance and platform fees.
+
+**URL Parameters:**
+- `id` (required): Payment ID to redistribute
+
+**Response:**
+
+```json
+{
+  "id": "67890abcdef12345",
+  "amount": 50000,
+  "baseAmount": 49500,
+  "totalPaid": 50000,
+  "platformFee": 500,
+  "status": "COMPLETED",
+  "redistributedAt": "2025-11-17T10:30:00Z",
+  "paymentType": {
+    "id": "507f1f77bcf86cd799439011",
+    "name": "Monthly Rent"
+  },
+  "sender": {
+    "id": "507f1f77bcf86cd799439013",
+    "firstName": "Jean",
+    "lastName": "Mukamana"
+  },
+  "cooperative": {
+    "id": "507f1f77bcf86cd799439012",
+    "name": "Default Cooperative"
+  },
+  "updatedBalance": {
+    "cooperativeBalance": 2475000,
+    "totalBalance": 2500000,
+    "platformFees": 25000
+  }
+}
+```
+
+**Error Responses:**
+
+```json
+// Payment not found
+{
+  "statusCode": 404,
+  "message": "Payment not found",
+  "error": "Not Found"
+}
+
+// Payment not eligible for redistribution
+{
+  "statusCode": 400,
+  "message": "Payment is not in COMPLETED status and cannot be redistributed",
+  "error": "Bad Request"
+}
+
+// Balance redistribution failed
+{
+  "statusCode": 500,
+  "message": "Failed to redistribute payment balance",
+  "error": "Internal Server Error"
+}
+```
+
+#### Batch Balance Redistribution
+
+**POST** `/balance/redistribute/batch` 🔒 *Admin Only*
+
+**Required Roles:** `ORGANIZATION_ADMIN`, `SUPER_ADMIN`
+
+**Description:** Process multiple payments for balance redistribution in a single batch operation. Ideal for bulk corrections and legacy payment updates.
+
+**Request Body:**
+
+```json
+{
+  "paymentIds": [
+    "67890abcdef12345",
+    "67890abcdef12346",
+    "67890abcdef12347"
+  ]
+}
+```
+
+**Response:**
+
+```json
+{
+  "batchId": "batch_67890abcdef12345",
+  "processedCount": 3,
+  "successCount": 2,
+  "failureCount": 1,
+  "totalAmount": 150000,
+  "totalBaseAmount": 148500,
+  "totalPlatformFees": 1500,
+  "processedAt": "2025-11-17T10:30:00Z",
+  "results": [
+    {
+      "paymentId": "67890abcdef12345",
+      "status": "SUCCESS",
+      "amount": 50000,
+      "baseAmount": 49500,
+      "platformFee": 500,
+      "redistributedAt": "2025-11-17T10:30:15Z"
+    },
+    {
+      "paymentId": "67890abcdef12346",
+      "status": "SUCCESS",
+      "amount": 50000,
+      "baseAmount": 49500,
+      "platformFee": 500,
+      "redistributedAt": "2025-11-17T10:30:18Z"
+    },
+    {
+      "paymentId": "67890abcdef12347",
+      "status": "FAILED",
+      "error": "Payment not found",
+      "failedAt": "2025-11-17T10:30:20Z"
+    }
+  ],
+  "updatedBalance": {
+    "cooperativeBalance": 2574000,
+    "totalBalance": 2600000,
+    "platformFees": 26000
+  }
+}
+```
+
+**Error Responses:**
+
+```json
+// Invalid request body
+{
+  "statusCode": 400,
+  "message": "PaymentIds must be a non-empty array",
+  "error": "Bad Request"
+}
+
+// Too many payment IDs
+{
+  "statusCode": 400,
+  "message": "Maximum 100 payment IDs allowed per batch",
+  "error": "Bad Request"
+}
+```
+
+#### Get Pending Redistributions
+
+**GET** `/balance/redistribute/pending` 🔒 *Admin Only*
+
+**Required Roles:** `ORGANIZATION_ADMIN`, `SUPER_ADMIN`
+
+**Description:** Query payments that may need balance redistribution. Useful for identifying legacy payments or payments with missing balance calculations.
+
+**Query Parameters:**
+
+- `cooperativeId` (optional): Filter by cooperative ID (super admin only)
+- `limit` (optional): Maximum number of results (default: 50, max: 100)
+- `offset` (optional): Number of records to skip for pagination (default: 0)
+- `fromDate` (optional): Filter payments created from this date (ISO 8601)
+- `toDate` (optional): Filter payments created until this date (ISO 8601)
+
+**Example Request:**
+
+```bash
+curl -X GET "/balance/redistribute/pending?cooperativeId=507f1f77bcf86cd799439012&limit=20&offset=0&fromDate=2025-10-01T00:00:00Z" \
+  -H "Authorization: Bearer <admin_token>"
+```
+
+**Response:**
+
+```json
+{
+  "data": [
+    {
+      "id": "67890abcdef12345",
+      "amount": 50000,
+      "baseAmount": null,
+      "totalPaid": null,
+      "status": "COMPLETED",
+      "needsRedistribution": true,
+      "reason": "Legacy payment missing baseAmount calculation",
+      "paymentType": {
+        "id": "507f1f77bcf86cd799439011",
+        "name": "Monthly Rent"
+      },
+      "sender": {
+        "id": "507f1f77bcf86cd799439013",
+        "firstName": "Jean",
+        "lastName": "Mukamana"
+      },
+      "cooperative": {
+        "id": "507f1f77bcf86cd799439012",
+        "name": "Default Cooperative"
+      },
+      "createdAt": "2025-10-15T08:00:00Z",
+      "paidAt": "2025-10-15T08:05:00Z"
+    },
+    {
+      "id": "67890abcdef12346",
+      "amount": 25000,
+      "baseAmount": null,
+      "totalPaid": null,
+      "status": "COMPLETED",
+      "needsRedistribution": true,
+      "reason": "Legacy payment missing baseAmount calculation",
+      "paymentType": {
+        "id": "507f1f77bcf86cd799439015",
+        "name": "Monthly Utilities"
+      },
+      "sender": {
+        "id": "507f1f77bcf86cd799439014",
+        "firstName": "Marie",
+        "lastName": "Uwimana"
+      },
+      "cooperative": {
+        "id": "507f1f77bcf86cd799439012",
+        "name": "Default Cooperative"
+      },
+      "createdAt": "2025-10-16T14:30:00Z",
+      "paidAt": "2025-10-16T14:35:00Z"
+    }
+  ],
+  "meta": {
+    "total": 45,
+    "limit": 50,
+    "offset": 0,
+    "hasMore": false,
+    "cooperativeId": "507f1f77bcf86cd799439012",
+    "dateRange": {
+      "fromDate": "2025-10-01T00:00:00Z",
+      "toDate": "2025-11-17T23:59:59Z"
+    }
+  },
+  "summary": {
+    "totalPendingAmount": 1125000,
+    "estimatedPlatformFees": 22500,
+    "estimatedBaseAmount": 1102500,
+    "affectedPayments": 45
+  }
+}
+```
+
+**Response Fields:**
+
+- `needsRedistribution`: Boolean indicating if payment requires redistribution
+- `reason`: Human-readable explanation of why redistribution is needed
+- `summary.estimatedPlatformFees`: Estimated total platform fees (500 RWF per payment)
+- `summary.estimatedBaseAmount`: Estimated total base amount after fee deduction
+- `meta.hasMore`: Boolean indicating if more results are available with increased offset
+
+**Access Control:**
+
+- **Organization Admin**: Can only view pending redistributions for their cooperative
+- **Super Admin**: Can view pending redistributions across all cooperatives or filter by specific cooperative
+
+#### Balance Redistribution Features
+
+- **Legacy Payment Support**: Handles payments created before baseAmount/totalPaid fields were implemented
+- **Backward Compatibility**: Calculates legacy base amounts using 500 RWF platform fee deduction
+- **Batch Processing**: Efficient bulk redistribution operations for large datasets
+- **Error Handling**: Comprehensive error messages and partial success reporting
+- **Audit Trail**: Complete tracking of redistribution operations and timestamps
+- **Role-based Access**: Organization admins restricted to their cooperative, super admins have global access
+- **MongoDB Compatibility**: Sequential processing designed for shared cluster environments
+- **Balance Validation**: Ensures cooperative balance accuracy after redistribution operations
+
+#### Integration Examples
+
+**Single Payment Redistribution:**
+
+```bash
+# Redistribute a specific payment
+curl -X POST "https://api.copay.rw/v1/balance/redistribute/payment/67890abcdef12345" \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+```
+
+**Batch Redistribution:**
+
+```bash
+# Redistribute multiple payments
+curl -X POST "https://api.copay.rw/v1/balance/redistribute/batch" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." \
+  -d '{
+    "paymentIds": [
+      "67890abcdef12345",
+      "67890abcdef12346",
+      "67890abcdef12347"
+    ]
+  }'
+```
+
+**Query Pending Redistributions:**
+
+```bash
+# Get pending redistributions with filtering
+curl -X GET "https://api.copay.rw/v1/balance/redistribute/pending?limit=20&fromDate=2025-10-01T00:00:00Z" \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+```
+
+---
+
 ### Activities
 
 The Activity API provides comprehensive user activity tracking and audit logging.

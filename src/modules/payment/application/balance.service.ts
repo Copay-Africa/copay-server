@@ -460,4 +460,264 @@ export class BalanceService {
       },
     };
   }
+
+  // Balance Redistribution Methods
+
+  async redistributePaymentBalance(
+    paymentId: string,
+    force: boolean = false
+  ) {
+    this.logger.log(`Redistributing balance for payment ${paymentId}, force: ${force}`);
+
+    // Get payment with all related data
+    const payment = await this.prismaService.payment.findUnique({
+      where: { id: paymentId },
+      include: {
+        sender: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+          },
+        },
+        cooperative: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+      },
+    });
+
+    if (!payment) {
+      throw new NotFoundException('Payment not found');
+    }
+
+    // Check if payment is eligible for redistribution
+    if (!force && payment.cooperativeBalanceUpdated && payment.feeBalanceUpdated) {
+      throw new BadRequestException(
+        'Payment balance has already been redistributed. Use force=true to redistribute anyway.'
+      );
+    }
+
+    if (payment.status !== 'COMPLETED') {
+      throw new BadRequestException(
+        'Only completed payments can be redistributed'
+      );
+    }
+
+    let cooperativeUpdated = payment.cooperativeBalanceUpdated;
+    let feeUpdated = payment.feeBalanceUpdated;
+
+    try {
+      // Process cooperative balance credit if needed
+      if (!cooperativeUpdated || force) {
+        const baseAmount = this.getLegacyBaseAmount(payment);
+        await this.creditCooperativeBalance(
+          payment.cooperativeId,
+          baseAmount,
+          paymentId,
+          `Manual redistribution: Payment from ${payment.sender.firstName} ${payment.sender.lastName}`,
+        );
+
+        await this.prismaService.payment.update({
+          where: { id: paymentId },
+          data: { cooperativeBalanceUpdated: true },
+        });
+
+        cooperativeUpdated = true;
+        this.logger.log(
+          `Manually credited ${baseAmount} RWF to cooperative ${payment.cooperative.name}`
+        );
+      }
+
+      // Process CoPay fee credit if needed
+      if (!feeUpdated || force) {
+        const fee = payment.fee || 500;
+        await this.creditCopayBalance(
+          fee,
+          paymentId,
+          `Manual redistribution: Transaction fee from payment ${paymentId}`,
+        );
+
+        await this.prismaService.payment.update({
+          where: { id: paymentId },
+          data: { feeBalanceUpdated: true },
+        });
+
+        feeUpdated = true;
+        this.logger.log(
+          `Manually credited ${fee} RWF fee to CoPay balance`
+        );
+      }
+
+      return {
+        success: true,
+        paymentId,
+        cooperativeBalanceUpdated: cooperativeUpdated,
+        feeBalanceUpdated: feeUpdated,
+        message: 'Balance redistribution completed successfully',
+      };
+    } catch (error) {
+      this.logger.error(
+        `Failed to redistribute balance for payment ${paymentId}: ${(error as Error).message}`
+      );
+      throw error;
+    }
+  }
+
+  async batchRedistributeBalances(options: {
+    paymentIds?: string[];
+    cooperativeId?: string;
+    force?: boolean;
+    maxCount?: number;
+  }) {
+    const { paymentIds, cooperativeId, force = false, maxCount = 50 } = options;
+    const limit = Math.min(maxCount, 100); // Safety limit
+
+    let paymentsToProcess: any[] = [];
+
+    if (paymentIds && paymentIds.length > 0) {
+      // Process specific payment IDs
+      paymentsToProcess = await this.prismaService.payment.findMany({
+        where: {
+          id: { in: paymentIds },
+          status: 'COMPLETED',
+        },
+        take: limit,
+        include: {
+          sender: { select: { firstName: true, lastName: true } },
+          cooperative: { select: { name: true } },
+        },
+      });
+    } else {
+      // Find pending redistribution payments
+      const whereClause: any = {
+        status: 'COMPLETED',
+        OR: [
+          { cooperativeBalanceUpdated: false },
+          { feeBalanceUpdated: false },
+        ],
+      };
+
+      if (cooperativeId) {
+        whereClause.cooperativeId = cooperativeId;
+      }
+
+      paymentsToProcess = await this.prismaService.payment.findMany({
+        where: whereClause,
+        take: limit,
+        orderBy: { createdAt: 'asc' },
+        include: {
+          sender: { select: { firstName: true, lastName: true } },
+          cooperative: { select: { name: true } },
+        },
+      });
+    }
+
+    const results: Array<{
+      paymentId: string;
+      success: boolean;
+      message: string;
+    }> = [];
+    let successful = 0;
+    let failed = 0;
+
+    for (const payment of paymentsToProcess) {
+      try {
+        const result = await this.redistributePaymentBalance(payment.id, force);
+        results.push({
+          paymentId: payment.id,
+          success: true,
+          message: result.message,
+        });
+        successful++;
+      } catch (error) {
+        results.push({
+          paymentId: payment.id,
+          success: false,
+          message: (error as Error).message,
+        });
+        failed++;
+      }
+    }
+
+    return {
+      totalProcessed: paymentsToProcess.length,
+      successful,
+      failed,
+      results,
+    };
+  }
+
+  async getPendingRedistributions(limit: number = 50, cooperativeId?: string) {
+    const whereClause: any = {
+      status: 'COMPLETED',
+      OR: [
+        { cooperativeBalanceUpdated: false },
+        { feeBalanceUpdated: false },
+      ],
+    };
+
+    if (cooperativeId) {
+      whereClause.cooperativeId = cooperativeId;
+    }
+
+    const pendingPayments = await this.prismaService.payment.findMany({
+      where: whereClause,
+      take: Math.min(limit, 100),
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        baseAmount: true,
+        fee: true,
+        amount: true,
+        cooperativeBalanceUpdated: true,
+        feeBalanceUpdated: true,
+        createdAt: true,
+        cooperative: {
+          select: {
+            name: true,
+          },
+        },
+      },
+    });
+
+    const totalPendingCount = await this.prismaService.payment.count({
+      where: whereClause,
+    });
+
+    // Calculate totals
+    let totalPendingAmount = 0;
+    let totalPendingFees = 0;
+
+    const formattedPayments = pendingPayments.map(payment => {
+      const baseAmount = this.getLegacyBaseAmount(payment);
+      const fee = payment.fee || 500;
+
+      if (!payment.cooperativeBalanceUpdated) {
+        totalPendingAmount += baseAmount;
+      }
+      if (!payment.feeBalanceUpdated) {
+        totalPendingFees += fee;
+      }
+
+      return {
+        paymentId: payment.id,
+        baseAmount,
+        fee,
+        cooperativeBalanceUpdated: payment.cooperativeBalanceUpdated,
+        feeBalanceUpdated: payment.feeBalanceUpdated,
+        cooperativeName: payment.cooperative.name,
+        createdAt: payment.createdAt,
+      };
+    });
+
+    return {
+      pendingPayments: formattedPayments,
+      totalPending: totalPendingCount,
+      totalPendingAmount,
+      totalPendingFees,
+    };
+  }
 }
