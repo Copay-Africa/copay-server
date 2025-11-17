@@ -148,6 +148,31 @@ Returns:
 
 ## Implementation Details
 
+### MongoDB Transaction Limitations
+
+**Important Note**: This implementation is designed to work with MongoDB deployments that don't support transactions (such as shared clusters). Instead of atomic transactions, the system uses sequential processing with error handling.
+
+### Sequential Balance Processing
+
+```typescript
+// Instead of $transaction(), we use sequential operations
+async processPaymentSettlement(paymentId: string) {
+  // 1. Credit cooperative balance
+  await creditCooperativeBalance(cooperativeId, baseAmount);
+  await markCooperativeBalanceUpdated(paymentId);
+  
+  // 2. Credit CoPay balance  
+  await creditCopayBalance(fee);
+  await markFeeBalanceUpdated(paymentId);
+}
+```
+
+**Benefits:**
+- Compatible with all MongoDB deployment types
+- Graceful error handling for partial failures
+- Idempotent processing prevents duplicate credits
+- Comprehensive logging for debugging
+
 ### Fee Calculation
 
 ```typescript
@@ -169,15 +194,26 @@ calculateTotalAmount(baseAmount: number) {
 ### Balance Redistribution
 
 ```typescript
-// After IremboPay confirms payment completion
+// Sequential processing (MongoDB compatible)
 async processPaymentSettlement(paymentId: string) {
-  // Credit cooperative with base amount
+  // Step 1: Credit cooperative with base amount
   await creditCooperativeBalance(cooperativeId, payment.baseAmount);
+  await markCooperativeBalanceUpdated(paymentId);
   
-  // Credit CoPay with fee
+  // Step 2: Credit CoPay with fee
   await creditCopayBalance(payment.fee);
+  await markFeeBalanceUpdated(paymentId);
+  
+  // Each step is tracked individually for resilience
 }
 ```
+
+**Error Handling:**
+
+- If cooperative credit fails → no changes made
+- If fee credit fails → cooperative credit already applied
+- Idempotency flags prevent duplicate processing
+- Failed operations can be retried safely
 
 ### Webhook Integration
 

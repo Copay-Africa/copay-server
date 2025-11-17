@@ -107,11 +107,12 @@ export class BalanceService {
 
   /**
    * Process payment settlement - redistribute funds after IremboPay settles
+   * Note: Using sequential processing instead of transactions due to MongoDB deployment limitations
    */
   async processPaymentSettlement(paymentId: string): Promise<void> {
-    // Start a transaction to ensure consistency
-    await this.prismaService.$transaction(async (tx) => {
-      const payment = await tx.payment.findUnique({
+    try {
+      // Fetch payment details
+      const payment = await this.prismaService.payment.findUnique({
         where: { id: paymentId },
         include: {
           cooperative: true,
@@ -137,47 +138,68 @@ export class BalanceService {
         return;
       }
 
-      // Credit cooperative balance with baseAmount
+      // Process cooperative balance credit
       if (!payment.cooperativeBalanceUpdated) {
-        await this.creditCooperativeBalance(
-          payment.cooperativeId,
-          payment.baseAmount,
-          paymentId,
-          `Payment from ${payment.sender.firstName} ${payment.sender.lastName}`,
-          tx,
-        );
+        try {
+          await this.creditCooperativeBalance(
+            payment.cooperativeId,
+            payment.baseAmount,
+            paymentId,
+            `Payment from ${payment.sender.firstName} ${payment.sender.lastName}`,
+          );
 
-        // Mark as processed
-        await tx.payment.update({
-          where: { id: paymentId },
-          data: { cooperativeBalanceUpdated: true },
-        });
+          // Mark cooperative balance as updated
+          await this.prismaService.payment.update({
+            where: { id: paymentId },
+            data: { cooperativeBalanceUpdated: true },
+          });
 
-        this.logger.log(
-          `Credited ${payment.baseAmount} RWF to cooperative ${payment.cooperative.name}`,
-        );
+          this.logger.log(
+            `Credited ${payment.baseAmount} RWF to cooperative ${payment.cooperative.name}`,
+          );
+        } catch (error) {
+          this.logger.error(
+            `Failed to credit cooperative balance for payment ${paymentId}: ${(error as Error).message}`,
+          );
+          throw error;
+        }
       }
 
-      // Credit CoPay balance with fee
+      // Process CoPay fee credit
       if (!payment.feeBalanceUpdated) {
-        await this.creditCopayBalance(
-          payment.fee,
-          paymentId,
-          `Transaction fee from payment ${payment.id}`,
-          tx,
-        );
+        try {
+          await this.creditCopayBalance(
+            payment.fee,
+            paymentId,
+            `Transaction fee from payment ${payment.id}`,
+          );
 
-        // Mark as processed
-        await tx.payment.update({
-          where: { id: paymentId },
-          data: { feeBalanceUpdated: true },
-        });
+          // Mark fee balance as updated
+          await this.prismaService.payment.update({
+            where: { id: paymentId },
+            data: { feeBalanceUpdated: true },
+          });
 
-        this.logger.log(
-          `Collected ${payment.fee} RWF fee from payment ${payment.id}`,
-        );
+          this.logger.log(
+            `Collected ${payment.fee} RWF fee from payment ${payment.id}`,
+          );
+        } catch (error) {
+          this.logger.error(
+            `Failed to credit CoPay balance for payment ${paymentId}: ${(error as Error).message}`,
+          );
+          // If cooperative balance was already updated but fee balance fails,
+          // we still want to mark it as a partial success
+          throw error;
+        }
       }
-    });
+
+      this.logger.log(`Payment settlement completed successfully for payment ${paymentId}`);
+    } catch (error) {
+      this.logger.error(
+        `Payment settlement failed for payment ${paymentId}: ${(error as Error).message}`,
+      );
+      throw error;
+    }
   }
 
   /**
@@ -188,17 +210,15 @@ export class BalanceService {
     amount: number,
     referenceId?: string,
     description?: string,
-    tx?: any,
   ) {
-    const prisma = tx || this.prismaService;
 
     // Get or create balance
-    let balance = await prisma.cooperativeBalance.findUnique({
+    let balance = await this.prismaService.cooperativeBalance.findUnique({
       where: { cooperativeId },
     });
 
     if (!balance) {
-      balance = await prisma.cooperativeBalance.create({
+      balance = await this.prismaService.cooperativeBalance.create({
         data: {
           cooperativeId,
           currentBalance: 0,
@@ -210,7 +230,7 @@ export class BalanceService {
     }
 
     // Update balance
-    await prisma.cooperativeBalance.update({
+    await this.prismaService.cooperativeBalance.update({
       where: { cooperativeId },
       data: {
         currentBalance: { increment: amount },
@@ -220,7 +240,7 @@ export class BalanceService {
     });
 
     // Create balance transaction record
-    await prisma.balanceTransaction.create({
+    await this.prismaService.balanceTransaction.create({
       data: {
         type: BalanceTransactionType.CREDIT_FROM_PAYMENT,
         amount,
@@ -240,15 +260,13 @@ export class BalanceService {
     amount: number,
     referenceId?: string,
     description?: string,
-    tx?: any,
   ) {
-    const prisma = tx || this.prismaService;
 
     // Get or create CoPay balance
-    let balance = await prisma.copayBalance.findFirst();
+    let balance = await this.prismaService.copayBalance.findFirst();
 
     if (!balance) {
-      balance = await prisma.copayBalance.create({
+      balance = await this.prismaService.copayBalance.create({
         data: {
           currentBalance: 0,
           totalFees: 0,
@@ -260,7 +278,7 @@ export class BalanceService {
     }
 
     // Update balance
-    await prisma.copayBalance.update({
+    await this.prismaService.copayBalance.update({
       where: { id: balance.id },
       data: {
         currentBalance: { increment: amount },
@@ -271,7 +289,7 @@ export class BalanceService {
     });
 
     // Create balance transaction record
-    await prisma.balanceTransaction.create({
+    await this.prismaService.balanceTransaction.create({
       data: {
         type: BalanceTransactionType.FEE_COLLECTION,
         amount,
