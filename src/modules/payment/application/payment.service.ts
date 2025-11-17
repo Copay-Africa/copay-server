@@ -1302,12 +1302,32 @@ export class PaymentService {
   }
 
   private mapToResponseDto(payment: any): PaymentResponseDto {
+    // Handle legacy payments that might not have baseAmount or totalPaid
+    let baseAmount = payment.baseAmount;
+    let totalPaid = payment.totalPaid;
+    const fee = payment.fee || 500;
+    
+    // For legacy payments without baseAmount, calculate it from amount
+    if (baseAmount === null || baseAmount === undefined) {
+      if (payment.amount) {
+        // Assume the amount includes the fee, so subtract fee to get baseAmount
+        baseAmount = Math.max(0, payment.amount - fee);
+      } else {
+        baseAmount = 0;
+      }
+    }
+    
+    // For legacy payments without totalPaid, use amount or calculate it
+    if (totalPaid === null || totalPaid === undefined) {
+      totalPaid = payment.amount || (baseAmount + fee);
+    }
+
     return {
       id: payment.id,
-      baseAmount: payment.baseAmount,
-      fee: payment.fee,
+      baseAmount: baseAmount,
+      fee: fee,
       amount: payment.amount,
-      totalPaid: payment.totalPaid,
+      totalPaid: totalPaid,
       status: payment.status,
       description: payment.description,
       dueDate: payment.dueDate,

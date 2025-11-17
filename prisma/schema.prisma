@@ -324,10 +324,10 @@ model Payment {
   id          String        @id @default(auto()) @map("_id") @db.ObjectId
   
   // Enhanced fee structure
-  baseAmount  Float         // Original payment amount before fees
+  baseAmount  Float?        // Original payment amount before fees (nullable for backward compatibility)
   fee         Float         @default(500) // Transaction fee (500 RWF fixed)
   amount      Float         // Total amount (baseAmount + fee) - for backward compatibility
-  totalPaid   Float         // Total amount paid (baseAmount + fee)
+  totalPaid   Float?        // Total amount paid (baseAmount + fee) (nullable for backward compatibility)
   
   status      PaymentStatus @default(PENDING)
   description String?
