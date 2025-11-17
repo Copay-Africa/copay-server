@@ -191,6 +191,35 @@ calculateTotalAmount(baseAmount: number) {
 }
 ```
 
+### Backward Compatibility
+
+The system automatically handles legacy payments that were created before the fee system implementation:
+
+**Legacy Payment Handling:**
+- **Null BaseAmount**: Automatically calculated from existing `amount` field minus fee
+- **Missing TotalPaid**: Uses existing `amount` or calculates `baseAmount + fee`  
+- **Default Fee**: Applies 500 RWF fee to payments that don't have a fee value
+- **Response Consistency**: All API responses include proper fee structure regardless of payment age
+
+**Example Legacy Payment Conversion:**
+```typescript
+// Legacy payment in database
+{
+  amount: 50500,
+  baseAmount: null,  // Will be calculated as 50000 (50500 - 500)
+  fee: null,         // Will default to 500
+  totalPaid: null    // Will use amount (50500)
+}
+
+// API response (automatically normalized)
+{
+  baseAmount: 50000,
+  fee: 500,
+  amount: 50500,
+  totalPaid: 50500
+}
+```
+
 ### Balance Redistribution
 
 ```typescript

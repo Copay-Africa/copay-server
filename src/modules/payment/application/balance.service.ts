@@ -22,7 +22,21 @@ export class BalanceService {
    * Fixed fee of 500 RWF for all transactions
    */
   calculatePaymentFee(baseAmount: number): number {
-    return 500; // Fixed 500 RWF transaction fee
+    // Fixed fee of 500 RWF for all payments
+    return 500;
+  }
+
+  // Helper method to calculate baseAmount for legacy payments
+  private getLegacyBaseAmount(payment: any): number {
+    // If baseAmount exists and is valid, use it
+    if (payment.baseAmount != null && payment.baseAmount > 0) {
+      return payment.baseAmount;
+    }
+    
+    // For legacy payments, calculate baseAmount from amount and fee
+    const amount = payment.amount || 0;
+    const fee = payment.fee || 500;
+    return Math.max(0, amount - fee);
   }
 
   /**
@@ -141,9 +155,10 @@ export class BalanceService {
       // Process cooperative balance credit
       if (!payment.cooperativeBalanceUpdated) {
         try {
+          const baseAmount = this.getLegacyBaseAmount(payment);
           await this.creditCooperativeBalance(
             payment.cooperativeId,
-            payment.baseAmount,
+            baseAmount,
             paymentId,
             `Payment from ${payment.sender.firstName} ${payment.sender.lastName}`,
           );
@@ -155,7 +170,7 @@ export class BalanceService {
           });
 
           this.logger.log(
-            `Credited ${payment.baseAmount} RWF to cooperative ${payment.cooperative.name}`,
+            `Credited ${baseAmount} RWF to cooperative ${payment.cooperative.name}`,
           );
         } catch (error) {
           this.logger.error(
