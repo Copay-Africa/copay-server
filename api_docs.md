@@ -537,6 +537,7 @@ Some endpoints are public and don't require authentication:
 {
   "name": "Nyamirambo Housing Cooperative",
   "code": "NHC001",
+  "categoryId": "507f1f77bcf86cd799439011",
   "description": "A housing cooperative in Nyamirambo",
   "address": "Nyamirambo, Kigali, Rwanda",
   "phone": "+250788111222",
@@ -550,6 +551,34 @@ Some endpoints are public and don't require authentication:
     "paymentDueDay": 15,
     "reminderDays": [7, 3, 1]
   }
+}
+```
+
+**Required Fields:**
+- `name`: Cooperative name (string)
+- `code`: Unique cooperative code (string)  
+- `categoryId`: Valid category ID from cooperative categories (MongoDB ObjectId)
+
+**Response includes category information:**
+```json
+{
+  "id": "507f1f77bcf86cd799439011",
+  "name": "Nyamirambo Housing Cooperative",
+  "code": "NHC001", 
+  "categoryId": "507f1f77bcf86cd799439011",
+  "category": {
+    "id": "507f1f77bcf86cd799439011",
+    "name": "Housing",
+    "description": "Housing and residential cooperatives"
+  },
+  "description": "A housing cooperative in Nyamirambo",
+  "address": "Nyamirambo, Kigali, Rwanda",
+  "phone": "+250788111222",
+  "email": "admin@nyamirambo.coop",
+  "status": "ACTIVE",
+  "memberCount": 0,
+  "createdAt": "2023-01-01T00:00:00.000Z",
+  "updatedAt": "2023-01-01T00:00:00.000Z"
 }
 ```
 
@@ -836,16 +865,16 @@ GET /cooperative-categories?page=1&limit=10&search=apartment&isActive=true&sortB
 
 The system comes with 8 predefined categories:
 
-| Category | Icon | Color | Description |
-|----------|------|--------|-------------|
-| Residential Apartment | 🏠 | #3B82F6 | Residential apartment complexes and housing cooperatives |
-| Business Complex | 🏢 | #10B981 | Commercial buildings and business centers |
-| Coworking Space | 💼 | #F59E0B | Shared workspaces and coworking facilities |
-| Student Housing | 🎓 | #8B5CF6 | Student dormitories and residential facilities |
-| Mixed Use | 🏘️ | #EF4444 | Properties with both residential and commercial use |
-| Industrial | 🏭 | #6B7280 | Warehouses, factories, and industrial facilities |
-| Retail | 🛍️ | #EC4899 | Shopping centers and retail complexes |
-| Hospitality | 🏨 | #06B6D4 | Hotels, hostels, and hospitality services |
+| Category              | Icon | Color   | Description                                              |
+| --------------------- | ---- | ------- | -------------------------------------------------------- |
+| Residential Apartment | 🏠    | #3B82F6 | Residential apartment complexes and housing cooperatives |
+| Business Complex      | 🏢    | #10B981 | Commercial buildings and business centers                |
+| Coworking Space       | 💼    | #F59E0B | Shared workspaces and coworking facilities               |
+| Student Housing       | 🎓    | #8B5CF6 | Student dormitories and residential facilities           |
+| Mixed Use             | 🏘️    | #EF4444 | Properties with both residential and commercial use      |
+| Industrial            | 🏭    | #6B7280 | Warehouses, factories, and industrial facilities         |
+| Retail                | 🛍️    | #EC4899 | Shopping centers and retail complexes                    |
+| Hospitality           | 🏨    | #06B6D4 | Hotels, hostels, and hospitality services                |
 
 ---
 

@@ -12,6 +12,18 @@ const prisma = new PrismaClient();
 async function main() {
   console.log('🌱 Starting seed...');
 
+  // Seed cooperative categories first
+  await seedCooperativeCategories(prisma);
+
+  // Get the first category for the default cooperative
+  const defaultCategory = await prisma.cooperativeCategory.findFirst({
+    where: { name: 'Residential Apartment' }
+  });
+
+  if (!defaultCategory) {
+    throw new Error('Default category not found after seeding');
+  }
+
   // Create a default cooperative
   const defaultCooperative = await prisma.cooperative.upsert({
     where: { code: 'DEFAULT_COOP' },
@@ -19,6 +31,7 @@ async function main() {
     create: {
       name: 'Default Cooperative',
       code: 'DEFAULT_COOP',
+      categoryId: defaultCategory.id,
       description: 'Default cooperative for testing',
       address: 'Kigali, Rwanda',
       phone: '+250788123456',

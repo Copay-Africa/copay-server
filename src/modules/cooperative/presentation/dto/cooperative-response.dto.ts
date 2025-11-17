@@ -20,6 +20,25 @@ export class CooperativeResponseDto {
   code: string;
 
   @ApiPropertyOptional({
+    description: 'Category ID',
+  })
+  categoryId?: string;
+
+  @ApiPropertyOptional({
+    description: 'Category information',
+    example: {
+      id: '507f1f77bcf86cd799439011',
+      name: 'Housing',
+      description: 'Housing cooperatives',
+    },
+  })
+  category?: {
+    id: string;
+    name: string;
+    description?: string;
+  };
+
+  @ApiPropertyOptional({
     description: 'Cooperative description',
     example: 'A housing cooperative in Kigali for affordable housing solutions',
   })

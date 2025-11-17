@@ -30,6 +30,15 @@ export class CooperativeService {
       throw new ConflictException('Cooperative code already exists');
     }
 
+    // Validate category exists
+    const category = await this.prismaService.cooperativeCategory.findUnique({
+      where: { id: createCooperativeDto.categoryId },
+    });
+
+    if (!category) {
+      throw new NotFoundException('Category not found');
+    }
+
     // Create cooperative
     const cooperative = await this.prismaService.cooperative.create({
       data: {
@@ -37,6 +46,13 @@ export class CooperativeService {
         status: CooperativeStatus.ACTIVE, // Auto-activate for now
       },
       include: {
+        category: {
+          select: {
+            id: true,
+            name: true,
+            description: true,
+          },
+        },
         _count: {
           select: { users: true },
         },
@@ -87,6 +103,13 @@ export class CooperativeService {
         skip,
         take: limit,
         include: {
+          category: {
+            select: {
+              id: true,
+              name: true,
+              description: true,
+            },
+          },
           _count: {
             select: { users: true },
           },
@@ -174,6 +197,13 @@ export class CooperativeService {
         skip,
         take: limit,
         include: {
+          category: {
+            select: {
+              id: true,
+              name: true,
+              description: true,
+            },
+          },
           _count: {
             select: { users: true },
           },
@@ -202,6 +232,13 @@ export class CooperativeService {
     const cooperative = await this.prismaService.cooperative.findUnique({
       where: { id },
       include: {
+        category: {
+          select: {
+            id: true,
+            name: true,
+            description: true,
+          },
+        },
         _count: {
           select: { users: true },
         },
@@ -239,6 +276,13 @@ export class CooperativeService {
       where: { id },
       data: { status },
       include: {
+        category: {
+          select: {
+            id: true,
+            name: true,
+            description: true,
+          },
+        },
         _count: {
           select: { users: true },
         },
@@ -284,6 +328,13 @@ export class CooperativeService {
         skip,
         take: limit,
         include: {
+          category: {
+            select: {
+              id: true,
+              name: true,
+              description: true,
+            },
+          },
           _count: {
             select: { users: true },
           },
@@ -311,6 +362,13 @@ export class CooperativeService {
         status: CooperativeStatus.ACTIVE, // Only show active cooperatives publicly
       },
       include: {
+        category: {
+          select: {
+            id: true,
+            name: true,
+            description: true,
+          },
+        },
         _count: {
           select: { users: true },
         },
@@ -329,6 +387,12 @@ export class CooperativeService {
       id: cooperative.id,
       name: cooperative.name,
       code: cooperative.code,
+      categoryId: cooperative.categoryId,
+      category: cooperative.category ? {
+        id: cooperative.category.id,
+        name: cooperative.category.name,
+        description: cooperative.category.description,
+      } : undefined,
       description: cooperative.description,
       address: cooperative.address,
       phone: cooperative.phone,

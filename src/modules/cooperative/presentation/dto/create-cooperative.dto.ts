@@ -1,4 +1,4 @@
-import { IsString, IsEmail, IsOptional, IsPhoneNumber } from 'class-validator';
+import { IsString, IsEmail, IsOptional, IsPhoneNumber, IsMongoId } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class CreateCooperativeDto {
@@ -15,6 +15,13 @@ export class CreateCooperativeDto {
   })
   @IsString()
   code: string;
+
+  @ApiProperty({
+    description: 'Category ID for the cooperative',
+    example: '507f1f77bcf86cd799439011',
+  })
+  @IsMongoId({ message: 'Category ID must be a valid MongoDB ObjectId' })
+  categoryId: string;
 
   @ApiPropertyOptional({
     description: 'Cooperative description',
