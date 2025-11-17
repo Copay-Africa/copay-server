@@ -720,4 +720,233 @@ export class BalanceService {
       totalPendingFees,
     };
   }
+
+  /**
+   * Get detailed revenue analysis for a specific cooperative
+   */
+  async getCooperativeRevenueAnalysis(cooperativeId: string, options?: {
+    fromDate?: Date;
+    toDate?: Date;
+    includeMonthlyBreakdown?: boolean;
+  }) {
+    const { fromDate, toDate, includeMonthlyBreakdown = false } = options || {};
+
+    // Build date filter
+    const dateFilter: any = {};
+    if (fromDate) dateFilter.gte = fromDate;
+    if (toDate) dateFilter.lte = toDate;
+
+    // Get cooperative info
+    const cooperative = await this.prismaService.cooperative.findUnique({
+      where: { id: cooperativeId },
+      select: { id: true, name: true, code: true },
+    });
+
+    if (!cooperative) {
+      throw new NotFoundException('Cooperative not found');
+    }
+
+    // Get all completed payments for this cooperative
+    const payments = await this.prismaService.payment.findMany({
+      where: {
+        cooperativeId,
+        status: 'COMPLETED',
+        ...(Object.keys(dateFilter).length > 0 ? { paidAt: dateFilter } : {}),
+      },
+      select: {
+        id: true,
+        amount: true,
+        baseAmount: true,
+        fee: true,
+        paidAt: true,
+        createdAt: true,
+        paymentType: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+        sender: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+          },
+        },
+      },
+      orderBy: { paidAt: 'desc' },
+    });
+
+    // Calculate totals
+    let totalRevenue = 0;
+    let totalFees = 0;
+    let totalPlatformRevenue = 0;
+    const paymentTypeBreakdown: Record<string, { count: number; revenue: number; fees: number }> = {};
+
+    payments.forEach(payment => {
+      const baseAmount = this.getLegacyBaseAmount(payment);
+      const fee = payment.fee || 500;
+      const totalPaid = payment.amount;
+
+      totalRevenue += baseAmount;
+      totalFees += fee;
+      totalPlatformRevenue += totalPaid;
+
+      // Payment type breakdown
+      const paymentTypeName = payment.paymentType?.name || 'Unknown';
+      if (!paymentTypeBreakdown[paymentTypeName]) {
+        paymentTypeBreakdown[paymentTypeName] = { count: 0, revenue: 0, fees: 0 };
+      }
+      paymentTypeBreakdown[paymentTypeName].count++;
+      paymentTypeBreakdown[paymentTypeName].revenue += baseAmount;
+      paymentTypeBreakdown[paymentTypeName].fees += fee;
+    });
+
+    // Monthly breakdown if requested
+    let monthlyBreakdown: any[] = [];
+    if (includeMonthlyBreakdown) {
+      const monthlyData: Record<string, { revenue: number; fees: number; count: number }> = {};
+      
+      payments.forEach(payment => {
+        const month = payment.paidAt ? 
+          payment.paidAt.toISOString().substring(0, 7) : // YYYY-MM format
+          payment.createdAt.toISOString().substring(0, 7);
+        
+        if (!monthlyData[month]) {
+          monthlyData[month] = { revenue: 0, fees: 0, count: 0 };
+        }
+        
+        const baseAmount = this.getLegacyBaseAmount(payment);
+        const fee = payment.fee || 500;
+        
+        monthlyData[month].revenue += baseAmount;
+        monthlyData[month].fees += fee;
+        monthlyData[month].count++;
+      });
+      
+      monthlyBreakdown = Object.entries(monthlyData)
+        .map(([month, data]) => ({ month, ...data }))
+        .sort((a, b) => a.month.localeCompare(b.month));
+    }
+
+    return {
+      cooperative,
+      summary: {
+        totalPayments: payments.length,
+        totalRevenue, // Amount received by cooperative (after platform fees)
+        totalFees, // Platform fees collected
+        totalPlatformRevenue, // Total amount paid by tenants
+        averagePaymentAmount: payments.length > 0 ? totalRevenue / payments.length : 0,
+        averageFeePerPayment: payments.length > 0 ? totalFees / payments.length : 0,
+      },
+      paymentTypeBreakdown: Object.entries(paymentTypeBreakdown).map(([name, data]) => ({
+        paymentType: name,
+        ...data,
+      })),
+      monthlyBreakdown,
+      dateRange: {
+        fromDate: fromDate?.toISOString() || null,
+        toDate: toDate?.toISOString() || null,
+      },
+    };
+  }
+
+  /**
+   * Get platform fee analysis across all cooperatives or specific cooperative
+   */
+  async getPlatformFeeAnalysis(options?: {
+    cooperativeId?: string;
+    fromDate?: Date;
+    toDate?: Date;
+  }) {
+    const { cooperativeId, fromDate, toDate } = options || {};
+
+    // Build filters
+    const whereClause: any = {
+      status: 'COMPLETED',
+    };
+
+    if (cooperativeId) {
+      whereClause.cooperativeId = cooperativeId;
+    }
+
+    if (fromDate || toDate) {
+      const dateFilter: any = {};
+      if (fromDate) dateFilter.gte = fromDate;
+      if (toDate) dateFilter.lte = toDate;
+      whereClause.paidAt = dateFilter;
+    }
+
+    // Get payments and cooperatives
+    const payments = await this.prismaService.payment.findMany({
+      where: whereClause,
+      select: {
+        id: true,
+        amount: true,
+        baseAmount: true,
+        fee: true,
+        paidAt: true,
+        cooperative: {
+          select: {
+            id: true,
+            name: true,
+            code: true,
+          },
+        },
+      },
+    });
+
+    // Group by cooperative
+    const cooperativeBreakdown: Record<string, {
+      cooperative: any;
+      totalPayments: number;
+      totalRevenue: number;
+      totalFees: number;
+    }> = {};
+
+    let totalPlatformFees = 0;
+    let totalCooperativeRevenue = 0;
+    let totalPayments = payments.length;
+
+    payments.forEach(payment => {
+      const cooperativeId = payment.cooperative.id;
+      const baseAmount = this.getLegacyBaseAmount(payment);
+      const fee = payment.fee || 500;
+
+      totalPlatformFees += fee;
+      totalCooperativeRevenue += baseAmount;
+
+      if (!cooperativeBreakdown[cooperativeId]) {
+        cooperativeBreakdown[cooperativeId] = {
+          cooperative: payment.cooperative,
+          totalPayments: 0,
+          totalRevenue: 0,
+          totalFees: 0,
+        };
+      }
+
+      cooperativeBreakdown[cooperativeId].totalPayments++;
+      cooperativeBreakdown[cooperativeId].totalRevenue += baseAmount;
+      cooperativeBreakdown[cooperativeId].totalFees += fee;
+    });
+
+    return {
+      summary: {
+        totalPayments,
+        totalPlatformFees,
+        totalCooperativeRevenue,
+        totalProcessedAmount: totalPlatformFees + totalCooperativeRevenue,
+        averageFeePerPayment: totalPayments > 0 ? totalPlatformFees / totalPayments : 0,
+        platformFeePercentage: totalPayments > 0 ? 
+          (totalPlatformFees / (totalPlatformFees + totalCooperativeRevenue)) * 100 : 0,
+      },
+      cooperativeBreakdown: Object.values(cooperativeBreakdown).sort((a, b) => 
+        b.totalFees - a.totalFees
+      ),
+      dateRange: {
+        fromDate: fromDate?.toISOString() || null,
+        toDate: toDate?.toISOString() || null,
+      },
+    };
+  }
 }

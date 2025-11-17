@@ -1570,17 +1570,30 @@ curl -X GET "https://api.copay.com/payments/organization/stats?fromDate=2025-10-
 
 ---
 
-### Balance Redistribution (Admin)
+### Balance Distribution Analysis (Admin)
 
-The Balance Redistribution API provides manual balance management and redistribution capabilities for administrators to handle payment balance corrections and legacy payment updates.
+The Balance Distribution Analysis API helps administrators understand and track how payment amounts are distributed between cooperatives and platform fees. **Key Purpose**: For each payment, determine how much goes to the cooperative (base payment) vs how much remains as platform fees.
+
+**Payment Distribution Model:**
+```
+Total Payment: 50,500 RWF
+├── Cooperative Payment (baseAmount): 50,000 RWF → Goes to cooperative
+└── Platform Fee: 500 RWF → Remains with platform
+```
+
+This API helps answer critical business questions:
+- How much total revenue has each cooperative received?
+- How much platform fees have been collected?
+- Which cooperatives generate the most revenue?
+- What's the platform's monthly fee income?
 
 #### Single Payment Redistribution
 
-**POST** `/balance/redistribute/payment/:id` 🔒 *Admin Only*
+**POST** `/balances/redistribute/payment/:id` 🔒 *Admin Only*
 
 **Required Roles:** `ORGANIZATION_ADMIN`, `SUPER_ADMIN`
 
-**Description:** Manually redistribute balance for a specific payment. This endpoint recalculates and redistributes payment fees between cooperative balance and platform fees.
+**Description:** Process and view balance distribution for a specific payment. Shows exactly how much goes to the cooperative (baseAmount) and how much remains as platform fee (500 RWF). Useful for ensuring proper allocation of funds.
 
 **URL Parameters:**
 - `id` (required): Payment ID to redistribute
@@ -1644,11 +1657,11 @@ The Balance Redistribution API provides manual balance management and redistribu
 
 #### Batch Balance Redistribution
 
-**POST** `/balance/redistribute/batch` 🔒 *Admin Only*
+**POST** `/balances/redistribute/batch` 🔒 *Admin Only*
 
 **Required Roles:** `ORGANIZATION_ADMIN`, `SUPER_ADMIN`
 
-**Description:** Process multiple payments for balance redistribution in a single batch operation. Ideal for bulk corrections and legacy payment updates.
+**Description:** View and redistribute balance allocation for multiple payments in a single batch operation. Shows how payment amounts are distributed to cooperative balances, ideal for processing legacy payments that need proper balance allocation.
 
 **Request Body:**
 
@@ -1726,11 +1739,11 @@ The Balance Redistribution API provides manual balance management and redistribu
 
 #### Get Pending Redistributions
 
-**GET** `/balance/redistribute/pending` 🔒 *Admin Only*
+**GET** `/balances/redistribute/pending` 🔒 *Admin Only*
 
 **Required Roles:** `ORGANIZATION_ADMIN`, `SUPER_ADMIN`
 
-**Description:** Query payments that may need balance redistribution. Useful for identifying legacy payments or payments with missing balance calculations.
+**Description:** Query payments that need proper balance distribution to cooperatives. Useful for identifying legacy payments where the balance allocation between cooperative funds and platform fees hasn't been calculated.
 
 **Query Parameters:**
 
@@ -1743,7 +1756,7 @@ The Balance Redistribution API provides manual balance management and redistribu
 **Example Request:**
 
 ```bash
-curl -X GET "/balance/redistribute/pending?cooperativeId=507f1f77bcf86cd799439012&limit=20&offset=0&fromDate=2025-10-01T00:00:00Z" \
+curl -X GET "/balances/redistribute/pending?cooperativeId=507f1f77bcf86cd799439012&limit=20&offset=0&fromDate=2025-10-01T00:00:00Z" \
   -H "Authorization: Bearer <admin_token>"
 ```
 
@@ -1834,16 +1847,17 @@ curl -X GET "/balance/redistribute/pending?cooperativeId=507f1f77bcf86cd79943901
 - **Organization Admin**: Can only view pending redistributions for their cooperative
 - **Super Admin**: Can view pending redistributions across all cooperatives or filter by specific cooperative
 
-#### Balance Redistribution Features
+#### Payment Distribution Features
 
-- **Legacy Payment Support**: Handles payments created before baseAmount/totalPaid fields were implemented
-- **Backward Compatibility**: Calculates legacy base amounts using 500 RWF platform fee deduction
-- **Batch Processing**: Efficient bulk redistribution operations for large datasets
-- **Error Handling**: Comprehensive error messages and partial success reporting
-- **Audit Trail**: Complete tracking of redistribution operations and timestamps
-- **Role-based Access**: Organization admins restricted to their cooperative, super admins have global access
-- **MongoDB Compatibility**: Sequential processing designed for shared cluster environments
-- **Balance Validation**: Ensures cooperative balance accuracy after redistribution operations
+- **Revenue Tracking**: Clear visibility into how much each cooperative receives vs platform fees
+- **Cooperative Analytics**: Detailed revenue analysis per cooperative with payment type breakdowns
+- **Platform Fee Monitoring**: Track total platform fee collection across all cooperatives
+- **Monthly Trends**: Understand revenue patterns and growth over time
+- **Payment Type Analysis**: See which payment types generate the most revenue
+- **Distribution Transparency**: 500 RWF fixed platform fee per payment, remainder goes to cooperative
+- **Legacy Payment Processing**: Handle older payments that need proper revenue allocation
+- **Role-based Access**: Organization admins see their cooperative's revenue only
+- **Administrative Reports**: Comprehensive financial reports for platform management
 
 #### Integration Examples
 
@@ -1851,7 +1865,7 @@ curl -X GET "/balance/redistribute/pending?cooperativeId=507f1f77bcf86cd79943901
 
 ```bash
 # Redistribute a specific payment
-curl -X POST "https://api.copay.rw/v1/balance/redistribute/payment/67890abcdef12345" \
+curl -X POST "https://api.copay.rw/v1/balances/redistribute/payment/67890abcdef12345" \
   -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
 ```
 
@@ -1859,7 +1873,7 @@ curl -X POST "https://api.copay.rw/v1/balance/redistribute/payment/67890abcdef12
 
 ```bash
 # Redistribute multiple payments
-curl -X POST "https://api.copay.rw/v1/balance/redistribute/batch" \
+curl -X POST "https://api.copay.rw/v1/balances/redistribute/batch" \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." \
   -d '{
@@ -1875,7 +1889,7 @@ curl -X POST "https://api.copay.rw/v1/balance/redistribute/batch" \
 
 ```bash
 # Get pending redistributions with filtering
-curl -X GET "https://api.copay.rw/v1/balance/redistribute/pending?limit=20&fromDate=2025-10-01T00:00:00Z" \
+curl -X GET "https://api.copay.rw/v1/balances/redistribute/pending?limit=20&fromDate=2025-10-01T00:00:00Z" \
   -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
 ```
 

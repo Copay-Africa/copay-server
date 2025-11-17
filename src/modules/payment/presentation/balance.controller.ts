@@ -333,4 +333,189 @@ export class BalanceController {
       cooperativeId,
     );
   }
+
+  @Get('analysis/cooperative/:cooperativeId')
+  @Roles(UserRole.SUPER_ADMIN, UserRole.ORGANIZATION_ADMIN)
+  @ApiOperation({
+    summary: 'Get cooperative revenue analysis',
+    description:
+      'Get detailed revenue analysis for a specific cooperative including payment breakdowns and monthly trends',
+  })
+  @ApiParam({
+    name: 'cooperativeId',
+    description: 'Cooperative ID to analyze',
+    example: '507f1f77bcf86cd799439012',
+  })
+  @ApiQuery({
+    name: 'fromDate',
+    description: 'Start date for analysis (ISO 8601)',
+    required: false,
+    example: '2025-01-01T00:00:00Z',
+  })
+  @ApiQuery({
+    name: 'toDate',
+    description: 'End date for analysis (ISO 8601)',
+    required: false,
+    example: '2025-12-31T23:59:59Z',
+  })
+  @ApiQuery({
+    name: 'includeMonthlyBreakdown',
+    description: 'Include monthly revenue breakdown',
+    required: false,
+    type: 'boolean',
+    example: true,
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Cooperative revenue analysis retrieved successfully',
+    schema: {
+      type: 'object',
+      properties: {
+        cooperative: {
+          type: 'object',
+          properties: {
+            id: { type: 'string' },
+            name: { type: 'string' },
+            code: { type: 'string' },
+          },
+        },
+        summary: {
+          type: 'object',
+          properties: {
+            totalPayments: { type: 'number' },
+            totalRevenue: { type: 'number', description: 'Amount received by cooperative (after platform fees)' },
+            totalFees: { type: 'number', description: 'Platform fees collected' },
+            totalPlatformRevenue: { type: 'number', description: 'Total amount paid by tenants' },
+            averagePaymentAmount: { type: 'number' },
+            averageFeePerPayment: { type: 'number' },
+          },
+        },
+        paymentTypeBreakdown: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              paymentType: { type: 'string' },
+              count: { type: 'number' },
+              revenue: { type: 'number' },
+              fees: { type: 'number' },
+            },
+          },
+        },
+        monthlyBreakdown: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              month: { type: 'string', example: '2025-01' },
+              revenue: { type: 'number' },
+              fees: { type: 'number' },
+              count: { type: 'number' },
+            },
+          },
+        },
+      },
+    },
+  })
+  async getCooperativeAnalysis(
+    @Param('cooperativeId') cooperativeId: string,
+    @Query('fromDate') fromDate?: string,
+    @Query('toDate') toDate?: string,
+    @Query('includeMonthlyBreakdown') includeMonthlyBreakdown?: string,
+    @CurrentUser() user?: AuthenticatedUser,
+  ) {
+    // Access control: Organization admins can only view their own cooperative
+    if (
+      user?.role === UserRole.ORGANIZATION_ADMIN &&
+      user.cooperativeId !== cooperativeId
+    ) {
+      throw new BadRequestException(
+        'You can only view your own cooperative analysis',
+      );
+    }
+
+    const options: any = {};
+    if (fromDate) options.fromDate = new Date(fromDate);
+    if (toDate) options.toDate = new Date(toDate);
+    if (includeMonthlyBreakdown === 'true') options.includeMonthlyBreakdown = true;
+
+    return this.balanceService.getCooperativeRevenueAnalysis(cooperativeId, options);
+  }
+
+  @Get('analysis/platform-fees')
+  @Roles(UserRole.SUPER_ADMIN)
+  @ApiOperation({
+    summary: 'Get platform fee analysis',
+    description:
+      'Get detailed platform fee analysis across all cooperatives or specific cooperative (Super Admin only)',
+  })
+  @ApiQuery({
+    name: 'cooperativeId',
+    description: 'Filter analysis for specific cooperative',
+    required: false,
+    example: '507f1f77bcf86cd799439012',
+  })
+  @ApiQuery({
+    name: 'fromDate',
+    description: 'Start date for analysis (ISO 8601)',
+    required: false,
+    example: '2025-01-01T00:00:00Z',
+  })
+  @ApiQuery({
+    name: 'toDate',
+    description: 'End date for analysis (ISO 8601)',
+    required: false,
+    example: '2025-12-31T23:59:59Z',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Platform fee analysis retrieved successfully',
+    schema: {
+      type: 'object',
+      properties: {
+        summary: {
+          type: 'object',
+          properties: {
+            totalPayments: { type: 'number' },
+            totalPlatformFees: { type: 'number' },
+            totalCooperativeRevenue: { type: 'number' },
+            totalProcessedAmount: { type: 'number' },
+            averageFeePerPayment: { type: 'number' },
+            platformFeePercentage: { type: 'number' },
+          },
+        },
+        cooperativeBreakdown: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              cooperative: {
+                type: 'object',
+                properties: {
+                  id: { type: 'string' },
+                  name: { type: 'string' },
+                  code: { type: 'string' },
+                },
+              },
+              totalPayments: { type: 'number' },
+              totalRevenue: { type: 'number' },
+              totalFees: { type: 'number' },
+            },
+          },
+        },
+      },
+    },
+  })
+  async getPlatformFeeAnalysis(
+    @Query('cooperativeId') cooperativeId?: string,
+    @Query('fromDate') fromDate?: string,
+    @Query('toDate') toDate?: string,
+  ) {
+    const options: any = {};
+    if (cooperativeId) options.cooperativeId = cooperativeId;
+    if (fromDate) options.fromDate = new Date(fromDate);
+    if (toDate) options.toDate = new Date(toDate);
+
+    return this.balanceService.getPlatformFeeAnalysis(options);
+  }
 }
