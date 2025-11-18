@@ -61,7 +61,6 @@ export class CooperativeCategoryController {
   }
 
   @Get()
-  @Roles(UserRole.SUPER_ADMIN, UserRole.ORGANIZATION_ADMIN)
   @ApiOperation({
     summary: 'Get all cooperative categories',
     description:
