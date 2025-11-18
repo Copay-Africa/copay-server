@@ -125,11 +125,17 @@ export class BalanceController {
     return this.balanceService.calculateTotalAmount(baseAmount);
   }
 
-  @Get('cooperatives')
+    @Get('cooperatives')
   @Roles(UserRole.SUPER_ADMIN)
   @ApiOperation({
     summary: 'List all cooperative balances',
-    description: 'Get summary of all cooperative balances (Super Admin only)',
+    description: 'Get summary of all cooperative balances with monthly filtering (Super Admin only)',
+  })
+  @ApiQuery({
+    name: 'month',
+    description: 'Filter by month (YYYY-MM format). Defaults to current month.',
+    required: false,
+    example: '2025-11',
   })
   @ApiResponse({
     status: 200,
@@ -148,7 +154,6 @@ export class BalanceController {
                   id: { type: 'string' },
                   name: { type: 'string' },
                   code: { type: 'string' },
-                  status: { type: 'string' },
                 },
               },
               balance: {
@@ -156,12 +161,10 @@ export class BalanceController {
                 properties: {
                   currentBalance: { type: 'number' },
                   totalReceived: { type: 'number' },
-                  totalWithdrawn: { type: 'number' },
                   pendingBalance: { type: 'number' },
-                  lastPaymentAt: { type: 'string', format: 'date-time' },
                 },
               },
-              stats: {
+              monthlyStats: {
                 type: 'object',
                 properties: {
                   totalPayments: { type: 'number' },
@@ -173,20 +176,30 @@ export class BalanceController {
             },
           },
         },
-        summary: {
+        filterInfo: {
+          type: 'object',
+          properties: {
+            month: { type: 'string', example: '2025-11' },
+            fromDate: { type: 'string', format: 'date-time' },
+            toDate: { type: 'string', format: 'date-time' },
+          },
+        },
+        totals: {
           type: 'object',
           properties: {
             totalCooperatives: { type: 'number' },
             totalBalance: { type: 'number' },
-            totalRevenue: { type: 'number' },
-            totalFees: { type: 'number' },
+            totalMonthlyRevenue: { type: 'number' },
+            totalMonthlyFees: { type: 'number' },
           },
         },
       },
     },
   })
-  async getAllCooperativeBalances() {
-    return this.balanceService.getAllCooperativeBalances();
+  async getAllCooperativeBalances(
+    @Query('month') month?: string,
+  ) {
+    return this.balanceService.getAllCooperativeBalances(month);
   }
 
   // Balance Redistribution Endpoints

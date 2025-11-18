@@ -974,9 +974,32 @@ export class BalanceService {
   }
 
   /**
-   * Get all cooperative balances with revenue analysis
+   * Get all cooperative balances with revenue analysis and monthly filtering
    */
-  async getAllCooperativeBalances() {
+  async getAllCooperativeBalances(month?: string) {
+    // Parse month or default to current month
+    let targetMonth: string;
+    let fromDate: Date;
+    let toDate: Date;
+
+    if (month) {
+      // Validate month format (YYYY-MM)
+      if (!/^\d{4}-\d{2}$/.test(month)) {
+        throw new BadRequestException(
+          'Month must be in YYYY-MM format (e.g., 2025-11)',
+        );
+      }
+      targetMonth = month;
+    } else {
+      // Default to current month
+      const now = new Date();
+      targetMonth = now.toISOString().substring(0, 7); // YYYY-MM format
+    }
+
+    // Calculate month boundaries
+    const [year, monthNum] = targetMonth.split('-').map(Number);
+    fromDate = new Date(year, monthNum - 1, 1); // First day of month
+    toDate = new Date(year, monthNum, 0, 23, 59, 59, 999); // Last day of month
     // Get all cooperatives with their balances
     const cooperatives = await this.prismaService.cooperative.findMany({
       select: {
@@ -1004,16 +1027,24 @@ export class BalanceService {
 
     // For each cooperative, calculate detailed stats
     for (const cooperative of cooperatives) {
-      // Get completed payments for this cooperative
+      // Get completed payments for this cooperative within the specified month
       const payments = await this.prismaService.payment.findMany({
         where: {
           cooperativeId: cooperative.id,
           status: 'COMPLETED',
+          ...(fromDate &&
+            toDate && {
+              createdAt: {
+                gte: fromDate,
+                lte: toDate,
+              },
+            }),
         },
         select: {
           amount: true,
           baseAmount: true,
           fee: true,
+          createdAt: true,
         },
       });
 
@@ -1060,12 +1091,21 @@ export class BalanceService {
     }
 
     return {
+      month: targetMonth,
+      period: {
+        from: fromDate.toISOString(),
+        to: toDate.toISOString(),
+      },
       cooperatives: cooperativeBalances,
       summary: {
         totalCooperatives: cooperatives.length,
         totalBalance,
         totalRevenue,
         totalFees,
+        monthlyRevenue: totalRevenue,
+        monthlyFees: totalFees,
+        averageRevenuePerCooperative:
+          cooperatives.length > 0 ? totalRevenue / cooperatives.length : 0,
       },
     };
   }
