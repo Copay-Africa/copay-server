@@ -32,7 +32,7 @@ export class BalanceService {
     if (payment.baseAmount != null && payment.baseAmount > 0) {
       return payment.baseAmount;
     }
-    
+
     // For legacy payments, calculate baseAmount from amount and fee
     const amount = payment.amount || 0;
     const fee = payment.fee || 500;
@@ -208,7 +208,9 @@ export class BalanceService {
         }
       }
 
-      this.logger.log(`Payment settlement completed successfully for payment ${paymentId}`);
+      this.logger.log(
+        `Payment settlement completed successfully for payment ${paymentId}`,
+      );
     } catch (error) {
       this.logger.error(
         `Payment settlement failed for payment ${paymentId}: ${(error as Error).message}`,
@@ -226,7 +228,6 @@ export class BalanceService {
     referenceId?: string,
     description?: string,
   ) {
-
     // Get or create balance
     let balance = await this.prismaService.cooperativeBalance.findUnique({
       where: { cooperativeId },
@@ -276,7 +277,6 @@ export class BalanceService {
     referenceId?: string,
     description?: string,
   ) {
-
     // Get or create CoPay balance
     let balance = await this.prismaService.copayBalance.findFirst();
 
@@ -463,11 +463,10 @@ export class BalanceService {
 
   // Balance Redistribution Methods
 
-  async redistributePaymentBalance(
-    paymentId: string,
-    force: boolean = false
-  ) {
-    this.logger.log(`Redistributing balance for payment ${paymentId}, force: ${force}`);
+  async redistributePaymentBalance(paymentId: string, force: boolean = false) {
+    this.logger.log(
+      `Redistributing balance for payment ${paymentId}, force: ${force}`,
+    );
 
     // Get payment with all related data
     const payment = await this.prismaService.payment.findUnique({
@@ -494,15 +493,19 @@ export class BalanceService {
     }
 
     // Check if payment is eligible for redistribution
-    if (!force && payment.cooperativeBalanceUpdated && payment.feeBalanceUpdated) {
+    if (
+      !force &&
+      payment.cooperativeBalanceUpdated &&
+      payment.feeBalanceUpdated
+    ) {
       throw new BadRequestException(
-        'Payment balance has already been redistributed. Use force=true to redistribute anyway.'
+        'Payment balance has already been redistributed. Use force=true to redistribute anyway.',
       );
     }
 
     if (payment.status !== 'COMPLETED') {
       throw new BadRequestException(
-        'Only completed payments can be redistributed'
+        'Only completed payments can be redistributed',
       );
     }
 
@@ -527,7 +530,7 @@ export class BalanceService {
 
         cooperativeUpdated = true;
         this.logger.log(
-          `Manually credited ${baseAmount} RWF to cooperative ${payment.cooperative.name}`
+          `Manually credited ${baseAmount} RWF to cooperative ${payment.cooperative.name}`,
         );
       }
 
@@ -546,9 +549,7 @@ export class BalanceService {
         });
 
         feeUpdated = true;
-        this.logger.log(
-          `Manually credited ${fee} RWF fee to CoPay balance`
-        );
+        this.logger.log(`Manually credited ${fee} RWF fee to CoPay balance`);
       }
 
       return {
@@ -560,7 +561,7 @@ export class BalanceService {
       };
     } catch (error) {
       this.logger.error(
-        `Failed to redistribute balance for payment ${paymentId}: ${(error as Error).message}`
+        `Failed to redistribute balance for payment ${paymentId}: ${(error as Error).message}`,
       );
       throw error;
     }
@@ -653,10 +654,7 @@ export class BalanceService {
   async getPendingRedistributions(limit: number = 50, cooperativeId?: string) {
     const whereClause: any = {
       status: 'COMPLETED',
-      OR: [
-        { cooperativeBalanceUpdated: false },
-        { feeBalanceUpdated: false },
-      ],
+      OR: [{ cooperativeBalanceUpdated: false }, { feeBalanceUpdated: false }],
     };
 
     if (cooperativeId) {
@@ -691,7 +689,7 @@ export class BalanceService {
     let totalPendingAmount = 0;
     let totalPendingFees = 0;
 
-    const formattedPayments = pendingPayments.map(payment => {
+    const formattedPayments = pendingPayments.map((payment) => {
       const baseAmount = this.getLegacyBaseAmount(payment);
       const fee = payment.fee || 500;
 
@@ -724,11 +722,14 @@ export class BalanceService {
   /**
    * Get detailed revenue analysis for a specific cooperative
    */
-  async getCooperativeRevenueAnalysis(cooperativeId: string, options?: {
-    fromDate?: Date;
-    toDate?: Date;
-    includeMonthlyBreakdown?: boolean;
-  }) {
+  async getCooperativeRevenueAnalysis(
+    cooperativeId: string,
+    options?: {
+      fromDate?: Date;
+      toDate?: Date;
+      includeMonthlyBreakdown?: boolean;
+    },
+  ) {
     const { fromDate, toDate, includeMonthlyBreakdown = false } = options || {};
 
     // Build date filter
@@ -781,9 +782,12 @@ export class BalanceService {
     let totalRevenue = 0;
     let totalFees = 0;
     let totalPlatformRevenue = 0;
-    const paymentTypeBreakdown: Record<string, { count: number; revenue: number; fees: number }> = {};
+    const paymentTypeBreakdown: Record<
+      string,
+      { count: number; revenue: number; fees: number }
+    > = {};
 
-    payments.forEach(payment => {
+    payments.forEach((payment) => {
       const baseAmount = this.getLegacyBaseAmount(payment);
       const fee = payment.fee || 500;
       const totalPaid = payment.amount;
@@ -795,7 +799,11 @@ export class BalanceService {
       // Payment type breakdown
       const paymentTypeName = payment.paymentType?.name || 'Unknown';
       if (!paymentTypeBreakdown[paymentTypeName]) {
-        paymentTypeBreakdown[paymentTypeName] = { count: 0, revenue: 0, fees: 0 };
+        paymentTypeBreakdown[paymentTypeName] = {
+          count: 0,
+          revenue: 0,
+          fees: 0,
+        };
       }
       paymentTypeBreakdown[paymentTypeName].count++;
       paymentTypeBreakdown[paymentTypeName].revenue += baseAmount;
@@ -805,25 +813,28 @@ export class BalanceService {
     // Monthly breakdown if requested
     let monthlyBreakdown: any[] = [];
     if (includeMonthlyBreakdown) {
-      const monthlyData: Record<string, { revenue: number; fees: number; count: number }> = {};
-      
-      payments.forEach(payment => {
-        const month = payment.paidAt ? 
-          payment.paidAt.toISOString().substring(0, 7) : // YYYY-MM format
-          payment.createdAt.toISOString().substring(0, 7);
-        
+      const monthlyData: Record<
+        string,
+        { revenue: number; fees: number; count: number }
+      > = {};
+
+      payments.forEach((payment) => {
+        const month = payment.paidAt
+          ? payment.paidAt.toISOString().substring(0, 7) // YYYY-MM format
+          : payment.createdAt.toISOString().substring(0, 7);
+
         if (!monthlyData[month]) {
           monthlyData[month] = { revenue: 0, fees: 0, count: 0 };
         }
-        
+
         const baseAmount = this.getLegacyBaseAmount(payment);
         const fee = payment.fee || 500;
-        
+
         monthlyData[month].revenue += baseAmount;
         monthlyData[month].fees += fee;
         monthlyData[month].count++;
       });
-      
+
       monthlyBreakdown = Object.entries(monthlyData)
         .map(([month, data]) => ({ month, ...data }))
         .sort((a, b) => a.month.localeCompare(b.month));
@@ -836,13 +847,17 @@ export class BalanceService {
         totalRevenue, // Amount received by cooperative (after platform fees)
         totalFees, // Platform fees collected
         totalPlatformRevenue, // Total amount paid by tenants
-        averagePaymentAmount: payments.length > 0 ? totalRevenue / payments.length : 0,
-        averageFeePerPayment: payments.length > 0 ? totalFees / payments.length : 0,
+        averagePaymentAmount:
+          payments.length > 0 ? totalRevenue / payments.length : 0,
+        averageFeePerPayment:
+          payments.length > 0 ? totalFees / payments.length : 0,
       },
-      paymentTypeBreakdown: Object.entries(paymentTypeBreakdown).map(([name, data]) => ({
-        paymentType: name,
-        ...data,
-      })),
+      paymentTypeBreakdown: Object.entries(paymentTypeBreakdown).map(
+        ([name, data]) => ({
+          paymentType: name,
+          ...data,
+        }),
+      ),
       monthlyBreakdown,
       dateRange: {
         fromDate: fromDate?.toISOString() || null,
@@ -897,18 +912,21 @@ export class BalanceService {
     });
 
     // Group by cooperative
-    const cooperativeBreakdown: Record<string, {
-      cooperative: any;
-      totalPayments: number;
-      totalRevenue: number;
-      totalFees: number;
-    }> = {};
+    const cooperativeBreakdown: Record<
+      string,
+      {
+        cooperative: any;
+        totalPayments: number;
+        totalRevenue: number;
+        totalFees: number;
+      }
+    > = {};
 
     let totalPlatformFees = 0;
     let totalCooperativeRevenue = 0;
     let totalPayments = payments.length;
 
-    payments.forEach(payment => {
+    payments.forEach((payment) => {
       const cooperativeId = payment.cooperative.id;
       const baseAmount = this.getLegacyBaseAmount(payment);
       const fee = payment.fee || 500;
@@ -936,16 +954,118 @@ export class BalanceService {
         totalPlatformFees,
         totalCooperativeRevenue,
         totalProcessedAmount: totalPlatformFees + totalCooperativeRevenue,
-        averageFeePerPayment: totalPayments > 0 ? totalPlatformFees / totalPayments : 0,
-        platformFeePercentage: totalPayments > 0 ? 
-          (totalPlatformFees / (totalPlatformFees + totalCooperativeRevenue)) * 100 : 0,
+        averageFeePerPayment:
+          totalPayments > 0 ? totalPlatformFees / totalPayments : 0,
+        platformFeePercentage:
+          totalPayments > 0
+            ? (totalPlatformFees /
+                (totalPlatformFees + totalCooperativeRevenue)) *
+              100
+            : 0,
       },
-      cooperativeBreakdown: Object.values(cooperativeBreakdown).sort((a, b) => 
-        b.totalFees - a.totalFees
+      cooperativeBreakdown: Object.values(cooperativeBreakdown).sort(
+        (a, b) => b.totalFees - a.totalFees,
       ),
       dateRange: {
         fromDate: fromDate?.toISOString() || null,
         toDate: toDate?.toISOString() || null,
+      },
+    };
+  }
+
+  /**
+   * Get all cooperative balances with revenue analysis
+   */
+  async getAllCooperativeBalances() {
+    // Get all cooperatives with their balances
+    const cooperatives = await this.prismaService.cooperative.findMany({
+      select: {
+        id: true,
+        name: true,
+        code: true,
+        status: true,
+        balance: {
+          select: {
+            currentBalance: true,
+            totalReceived: true,
+            totalWithdrawn: true,
+            pendingBalance: true,
+            lastPaymentAt: true,
+          },
+        },
+      },
+      orderBy: { name: 'asc' },
+    });
+
+    const cooperativeBalances: any[] = [];
+    let totalBalance = 0;
+    let totalRevenue = 0;
+    let totalFees = 0;
+
+    // For each cooperative, calculate detailed stats
+    for (const cooperative of cooperatives) {
+      // Get completed payments for this cooperative
+      const payments = await this.prismaService.payment.findMany({
+        where: {
+          cooperativeId: cooperative.id,
+          status: 'COMPLETED',
+        },
+        select: {
+          amount: true,
+          baseAmount: true,
+          fee: true,
+        },
+      });
+
+      // Calculate revenue and fees
+      let cooperativeRevenue = 0;
+      let cooperativeFees = 0;
+
+      payments.forEach((payment) => {
+        const baseAmount = this.getLegacyBaseAmount(payment);
+        const fee = payment.fee || 500;
+
+        cooperativeRevenue += baseAmount;
+        cooperativeFees += fee;
+      });
+
+      totalRevenue += cooperativeRevenue;
+      totalFees += cooperativeFees;
+
+      const currentBalance = cooperative.balance?.currentBalance || 0;
+      totalBalance += currentBalance;
+
+      cooperativeBalances.push({
+        cooperative: {
+          id: cooperative.id,
+          name: cooperative.name,
+          code: cooperative.code,
+          status: cooperative.status,
+        },
+        balance: cooperative.balance || {
+          currentBalance: 0,
+          totalReceived: 0,
+          totalWithdrawn: 0,
+          pendingBalance: 0,
+          lastPaymentAt: null,
+        },
+        stats: {
+          totalPayments: payments.length,
+          totalRevenue: cooperativeRevenue,
+          totalFees: cooperativeFees,
+          averagePaymentAmount:
+            payments.length > 0 ? cooperativeRevenue / payments.length : 0,
+        },
+      });
+    }
+
+    return {
+      cooperatives: cooperativeBalances,
+      summary: {
+        totalCooperatives: cooperatives.length,
+        totalBalance,
+        totalRevenue,
+        totalFees,
       },
     };
   }

@@ -18,12 +18,7 @@ import {
   ApiBody,
 } from '@nestjs/swagger';
 import { BalanceService } from '../application/balance.service';
-import {
-  CooperativeBalanceDto,
-  CopayBalanceDto,
-  BalanceOverviewDto,
-  PaymentCalculationDto,
-} from './dto/balance.dto';
+import { BalanceOverviewDto, PaymentCalculationDto } from './dto/balance.dto';
 import { JwtAuthGuard } from '../../../shared/guards/jwt-auth.guard';
 import { RolesGuard } from '../../../shared/guards/roles.guard';
 import { Roles } from '../../../shared/decorators/auth.decorator';
@@ -139,14 +134,59 @@ export class BalanceController {
   @ApiResponse({
     status: 200,
     description: 'Cooperative balances retrieved successfully',
+    schema: {
+      type: 'object',
+      properties: {
+        cooperatives: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              cooperative: {
+                type: 'object',
+                properties: {
+                  id: { type: 'string' },
+                  name: { type: 'string' },
+                  code: { type: 'string' },
+                  status: { type: 'string' },
+                },
+              },
+              balance: {
+                type: 'object',
+                properties: {
+                  currentBalance: { type: 'number' },
+                  totalReceived: { type: 'number' },
+                  totalWithdrawn: { type: 'number' },
+                  pendingBalance: { type: 'number' },
+                  lastPaymentAt: { type: 'string', format: 'date-time' },
+                },
+              },
+              stats: {
+                type: 'object',
+                properties: {
+                  totalPayments: { type: 'number' },
+                  totalRevenue: { type: 'number' },
+                  totalFees: { type: 'number' },
+                  averagePaymentAmount: { type: 'number' },
+                },
+              },
+            },
+          },
+        },
+        summary: {
+          type: 'object',
+          properties: {
+            totalCooperatives: { type: 'number' },
+            totalBalance: { type: 'number' },
+            totalRevenue: { type: 'number' },
+            totalFees: { type: 'number' },
+          },
+        },
+      },
+    },
   })
   async getAllCooperativeBalances() {
-    // This would be useful for the admin dashboard to show all cooperative balances
-    // For now, we'll return a simple implementation
-    return {
-      message: 'Feature coming soon - List all cooperative balances',
-      note: 'Use the global overview endpoint for now',
-    };
+    return this.balanceService.getAllCooperativeBalances();
   }
 
   // Balance Redistribution Endpoints
@@ -383,9 +423,19 @@ export class BalanceController {
           type: 'object',
           properties: {
             totalPayments: { type: 'number' },
-            totalRevenue: { type: 'number', description: 'Amount received by cooperative (after platform fees)' },
-            totalFees: { type: 'number', description: 'Platform fees collected' },
-            totalPlatformRevenue: { type: 'number', description: 'Total amount paid by tenants' },
+            totalRevenue: {
+              type: 'number',
+              description:
+                'Amount received by cooperative (after platform fees)',
+            },
+            totalFees: {
+              type: 'number',
+              description: 'Platform fees collected',
+            },
+            totalPlatformRevenue: {
+              type: 'number',
+              description: 'Total amount paid by tenants',
+            },
             averagePaymentAmount: { type: 'number' },
             averageFeePerPayment: { type: 'number' },
           },
@@ -437,9 +487,13 @@ export class BalanceController {
     const options: any = {};
     if (fromDate) options.fromDate = new Date(fromDate);
     if (toDate) options.toDate = new Date(toDate);
-    if (includeMonthlyBreakdown === 'true') options.includeMonthlyBreakdown = true;
+    if (includeMonthlyBreakdown === 'true')
+      options.includeMonthlyBreakdown = true;
 
-    return this.balanceService.getCooperativeRevenueAnalysis(cooperativeId, options);
+    return this.balanceService.getCooperativeRevenueAnalysis(
+      cooperativeId,
+      options,
+    );
   }
 
   @Get('analysis/platform-fees')
