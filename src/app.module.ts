@@ -12,6 +12,7 @@ import { UserModule } from './modules/user/user.module';
 import { CooperativeModule } from './modules/cooperative/cooperative.module';
 import { PaymentModule } from './modules/payment/payment.module';
 import { UssdModule } from './modules/ussd/ussd.module';
+import { RoomModule } from './modules/room/room.module';
 import { SmsModule } from './modules/sms/sms.module';
 import { ActivityModule } from './modules/activity/activity.module';
 import { ReminderModule } from './modules/reminder/reminder.module';
@@ -86,6 +87,7 @@ import {
     CooperativeCategoryModule,
     PaymentModule,
     UssdModule,
+    RoomModule,
     SmsModule,
     ActivityModule,
     ReminderModule,

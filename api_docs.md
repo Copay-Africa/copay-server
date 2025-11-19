@@ -385,6 +385,65 @@ Some endpoints are public and don't require authentication:
 - `inactiveUsers`: Number of users with INACTIVE status
 - `recentRegistrations`: Users registered in the last 30 days
 
+#### Get Current User Profile
+
+**GET** `/users/me`
+
+**Description:** Get the authenticated user's profile information based on JWT token.
+
+**Response:**
+
+```json
+{
+  "id": "507f1f77bcf86cd799439011",
+  "phone": "+250788123456",
+  "firstName": "John",
+  "lastName": "Doe",
+  "email": "john.doe@example.com",
+  "role": "TENANT",
+  "status": "ACTIVE",
+  "cooperative": {
+    "id": "507f1f77bcf86cd799439012",
+    "name": "Green Valley Housing Cooperative",
+    "code": "GVH001",
+    "status": "ACTIVE"
+  },
+  "lastLoginAt": "2025-11-15T10:30:00.000Z",
+  "createdAt": "2025-01-15T08:00:00.000Z",
+  "updatedAt": "2025-11-15T10:30:00.000Z"
+}
+```
+
+#### Get User Cooperatives
+
+**GET** `/users/me/cooperatives`
+
+**Description:** Get list of cooperatives the authenticated user belongs to or can make payments for. This includes cooperatives where the user has made payments or is directly assigned.
+
+**Response:**
+
+```json
+[
+  {
+    "id": "507f1f77bcf86cd799439012",
+    "name": "Green Valley Housing Cooperative",
+    "code": "GVH001",
+    "status": "ACTIVE"
+  },
+  {
+    "id": "507f1f77bcf86cd799439013",
+    "name": "Urban Savings Cooperative",
+    "code": "USC001",
+    "status": "ACTIVE"
+  }
+]
+```
+
+**Use Cases:**
+- Display list of cooperatives in mobile/web apps for payment selection
+- Show user's accessible cooperatives for payment history filtering
+- Multi-cooperative user access management
+
 ---
 
 ## Account Request Management APIs

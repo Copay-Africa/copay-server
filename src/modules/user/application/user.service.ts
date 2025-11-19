@@ -10,6 +10,7 @@ import { UserResponseDto } from '../presentation/dto/user-response.dto';
 import {
   CurrentUserResponseDto,
   CooperativeDetailsDto,
+  CooperativeRoomDto,
 } from '../presentation/dto/current-user-response.dto';
 import { UpdateTenantDto } from '../presentation/dto/update-tenant.dto';
 import { CreateTenantDto } from '../presentation/dto/create-tenant.dto';
@@ -209,6 +210,14 @@ export class UserService {
               },
             },
           },
+          // Cooperatives where user has room assignments
+          {
+            userCooperativeRooms: {
+              some: {
+                userId: userId,
+              },
+            },
+          },
         ],
       },
       select: {
@@ -216,6 +225,27 @@ export class UserService {
         name: true,
         code: true,
         status: true,
+        rooms: {
+          select: {
+            id: true,
+            roomNumber: true,
+            roomType: true,
+            floor: true,
+            block: true,
+            status: true,
+            baseRent: true,
+            deposit: true,
+            userCooperativeRooms: {
+              where: {
+                userId: userId,
+                isActive: true,
+              },
+              select: {
+                startDate: true,
+              },
+            },
+          },
+        },
       },
       distinct: ['id'],
     });
@@ -225,6 +255,18 @@ export class UserService {
       name: coop.name,
       code: coop.code,
       status: coop.status as any,
+      rooms: coop.rooms.map((room): CooperativeRoomDto => ({
+        id: room.id,
+        roomNumber: room.roomNumber,
+        roomType: room.roomType ?? undefined,
+        floor: room.floor ?? undefined,
+        block: room.block ?? undefined,
+        status: room.status,
+        baseRent: room.baseRent ?? undefined,
+        deposit: room.deposit ?? undefined,
+        isUserAssigned: room.userCooperativeRooms.length > 0,
+        assignmentStartDate: room.userCooperativeRooms[0]?.startDate,
+      })),
     }));
   }
 

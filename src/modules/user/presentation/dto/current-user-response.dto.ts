@@ -1,5 +1,9 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { UserRole, UserStatus, CooperativeStatus } from '@prisma/client';
+import { CooperativeRoomDto } from './cooperative-room.dto';
+
+// Re-export CooperativeRoomDto for convenience
+export { CooperativeRoomDto } from './cooperative-room.dto';
 
 export class CooperativeDetailsDto {
   @ApiProperty({
@@ -24,6 +28,12 @@ export class CooperativeDetailsDto {
     enum: CooperativeStatus,
   })
   status: CooperativeStatus;
+
+  @ApiPropertyOptional({
+    description: 'Rooms in this cooperative',
+    type: [CooperativeRoomDto],
+  })
+  rooms?: CooperativeRoomDto[];
 }
 
 export class CurrentUserResponseDto {

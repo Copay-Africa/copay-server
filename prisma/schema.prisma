@@ -7,7 +7,7 @@ generator client {
 
 datasource db {
   provider = "mongodb"
-  url      = env("DATABASE_URL")
+  url = env("DATABASE_URL")
 }
 
 // Enums
@@ -178,6 +178,14 @@ enum BalanceTransactionStatus {
   REVERSED // Transaction reversed/refunded
 }
 
+enum RoomStatus {
+  AVAILABLE
+  OCCUPIED
+  MAINTENANCE
+  RESERVED
+  OUT_OF_SERVICE
+}
+
 // Models
 model CooperativeCategory {
   id          String  @id @default(auto()) @map("_id") @db.ObjectId
@@ -222,18 +230,20 @@ model Cooperative {
   settings Json? // Flexible settings storage
 
   // Relationships
-  users               User[]
-  paymentTypes        PaymentType[]
-  payments            Payment[]
-  paymentTransactions PaymentTransaction[]
-  transactions        Transaction[]
-  complaints          Complaint[]
-  accountRequests     AccountRequest[]
-  activities          Activity[]
-  reminders           Reminder[]
-  notifications       Notification[]
-  announcements       Announcement[]
-  balance             CooperativeBalance?
+  users                User[] // Deprecated - use userCooperativeRooms
+  userCooperativeRooms UserCooperativeRoom[] // Many-to-many with users through rooms
+  rooms                Room[] // Cooperative's rooms
+  paymentTypes         PaymentType[]
+  payments             Payment[]
+  paymentTransactions  PaymentTransaction[]
+  transactions         Transaction[]
+  complaints           Complaint[]
+  accountRequests      AccountRequest[]
+  activities           Activity[]
+  reminders            Reminder[]
+  notifications        Notification[]
+  announcements        Announcement[]
+  balance              CooperativeBalance?
 
   // Timestamps
   createdAt DateTime @default(now())
@@ -252,9 +262,12 @@ model User {
   role      UserRole   @default(TENANT)
   status    UserStatus @default(PENDING)
 
-  // Multi-tenancy
+  // Multi-tenancy (deprecated - use userCooperativeRooms for many-to-many)
   cooperativeId String?      @db.ObjectId
   cooperative   Cooperative? @relation(fields: [cooperativeId], references: [id])
+
+  // Many-to-many relationship with cooperatives through rooms
+  userCooperativeRooms UserCooperativeRoom[]
 
   // Profile data
   profileData Json? // Flexible profile storage
@@ -347,6 +360,10 @@ model Payment {
   cooperativeId String      @db.ObjectId
   cooperative   Cooperative @relation(fields: [cooperativeId], references: [id])
 
+  // Room relationship (required for new payments)
+  roomId String? @db.ObjectId
+  room   Room?   @relation(fields: [roomId], references: [id])
+
   // Relationships
   senderId String @db.ObjectId
   sender   User   @relation("PaymentSender", fields: [senderId], references: [id])
@@ -428,6 +445,72 @@ model CopayBalance {
   transactions BalanceTransaction[]
 
   @@map("copay_balance")
+}
+
+model Room {
+  id          String     @id @default(auto()) @map("_id") @db.ObjectId
+  roomNumber  String // Room/unit number (e.g., "101", "A-205", "Block C Unit 15")
+  roomType    String? // Type of room/unit (e.g., "1BR", "2BR", "Studio", "Commercial")
+  floor       String? // Floor number or identifier
+  block       String? // Building block or section
+  description String? // Additional description
+  status      RoomStatus @default(AVAILABLE)
+
+  // Pricing and settings
+  baseRent Float? // Monthly rent amount
+  deposit  Float? // Security deposit required
+
+  // Room specifications
+  specifications Json? // Flexible room specs (square footage, amenities, etc.)
+
+  // Cooperative relationship
+  cooperativeId String      @db.ObjectId
+  cooperative   Cooperative @relation(fields: [cooperativeId], references: [id])
+
+  // Current occupant relationship
+  userCooperativeRooms UserCooperativeRoom[]
+
+  // Payment tracking
+  payments Payment[]
+
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([cooperativeId, roomNumber]) // Unique room number per cooperative
+  @@map("rooms")
+}
+
+model UserCooperativeRoom {
+  id String @id @default(auto()) @map("_id") @db.ObjectId
+
+  // Relationships
+  userId String @db.ObjectId
+  user   User   @relation(fields: [userId], references: [id])
+
+  cooperativeId String      @db.ObjectId
+  cooperative   Cooperative @relation(fields: [cooperativeId], references: [id])
+
+  roomId String @db.ObjectId
+  room   Room   @relation(fields: [roomId], references: [id])
+
+  // Assignment details
+  startDate DateTime  @default(now()) // When user was assigned to room
+  endDate   DateTime? // When assignment ends (null for active)
+  isActive  Boolean   @default(true) // Whether assignment is currently active
+
+  // Assignment metadata
+  assignedBy String?  @db.ObjectId // Admin who assigned the room
+  assignedAt DateTime @default(now())
+  notes      String? // Assignment notes
+
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, cooperativeId, isActive]) // One active room per user per cooperative
+  @@unique([roomId, isActive]) // One active user per room
+  @@map("user_cooperative_rooms")
 }
 
 model BalanceTransaction {
