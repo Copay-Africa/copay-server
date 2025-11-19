@@ -128,10 +128,20 @@ export class RoomService {
     const where: any = {};
 
     // Apply cooperative filter based on user role
-    if (currentUserRole !== UserRole.SUPER_ADMIN) {
+    if (currentUserRole === UserRole.SUPER_ADMIN) {
+      // Super admin can see all rooms, optionally filtered by cooperativeId
+      if (cooperativeId) {
+        where.cooperativeId = cooperativeId;
+      }
+    } else if (currentUserRole && currentCooperativeId) {
+      // Authenticated non-admin users see only their cooperative
       where.cooperativeId = currentCooperativeId;
     } else if (cooperativeId) {
+      // Public access - must provide cooperativeId
       where.cooperativeId = cooperativeId;
+    } else {
+      // Public access without cooperativeId - return empty result for security
+      return new PaginatedResponseDto([], 0, page, limit);
     }
 
     // Apply status filter

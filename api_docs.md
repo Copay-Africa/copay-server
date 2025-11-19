@@ -13,6 +13,7 @@
    - [Cooperative Categories](#cooperative-categories)
    - [Payment Types (Public)](#payment-types-public)
    - [Payments](#payments)
+   - [Room Management](#room-management)
    - [Activities](#activities)
    - [Reminders](#reminders)
    - [Complaints](#complaints)
@@ -3344,12 +3345,290 @@ Use these test credentials:
 
 ---
 
+## Room Management APIs
+
+The Room Management system provides comprehensive functionality for managing rooms within cooperatives, including room assignments, filtering, and notifications.
+
+### Get Rooms by Cooperative
+
+**GET** `/rooms`
+
+**Description:** Retrieve all rooms for a specific cooperative with filtering and pagination support. This is a public endpoint that requires a cooperativeId parameter for security.
+
+**Query Parameters:**
+
+- `cooperativeId` (required for public access): The cooperative ID to filter rooms by
+- `page` (optional): Page number for pagination (default: 1)
+- `limit` (optional): Number of rooms per page (default: 10)
+- `search` (optional): Search term for room number or description
+- `status` (optional): Filter by room status (AVAILABLE, OCCUPIED, MAINTENANCE, OUT_OF_SERVICE)
+- `roomType` (optional): Filter by room type
+- `floor` (optional): Filter by floor number
+- `block` (optional): Filter by block identifier
+- `sortBy` (optional): Field to sort by (roomNumber, createdAt, etc.)
+- `sortOrder` (optional): Sort order (asc, desc)
+
+**Authorization:** None (Public endpoint)
+
+**Response:**
+
+```json
+{
+  "data": [
+    {
+      "id": "507f1f77bcf86cd799439015",
+      "roomNumber": "A101",
+      "roomType": "1-BEDROOM",
+      "floor": "1",
+      "block": "A",
+      "description": "One bedroom apartment with balcony",
+      "status": "OCCUPIED",
+      "baseRent": 150000,
+      "deposit": 300000,
+      "specifications": {
+        "bedrooms": 1,
+        "bathrooms": 1,
+        "hasBalcony": true,
+        "area": "45sqm"
+      },
+      "cooperative": {
+        "id": "507f1f77bcf86cd799439012",
+        "name": "Green Valley Housing Cooperative",
+        "code": "GVH001",
+        "status": "ACTIVE"
+      },
+      "currentTenant": {
+        "id": "507f1f77bcf86cd799439014",
+        "phone": "+250788123456",
+        "firstName": "John",
+        "lastName": "Doe",
+        "assignedAt": "2025-01-15T08:00:00.000Z",
+        "startDate": "2025-01-15T08:00:00.000Z"
+      },
+      "createdAt": "2025-01-10T08:00:00.000Z",
+      "updatedAt": "2025-01-15T08:00:00.000Z"
+    }
+  ],
+  "meta": {
+    "total": 50,
+    "page": 1,
+    "limit": 10,
+    "pages": 5
+  }
+}
+```
+
+**Example Usage:**
+
+```bash
+# Get all available rooms in cooperative
+GET /rooms?cooperativeId=507f1f77bcf86cd799439012&status=AVAILABLE
+
+# Search for specific room numbers
+GET /rooms?cooperativeId=507f1f77bcf86cd799439012&search=A101
+
+# Get rooms with pagination
+GET /rooms?cooperativeId=507f1f77bcf86cd799439012&page=2&limit=20
+
+# Filter by room type and floor
+GET /rooms?cooperativeId=507f1f77bcf86cd799439012&roomType=2-BEDROOM&floor=2
+```
+
+### Get Room Statistics
+
+**GET** `/rooms/stats`
+
+**Description:** Get comprehensive statistics for rooms within a cooperative.
+
+**Query Parameters:**
+- `cooperativeId` (required): The cooperative ID to get statistics for
+
+**Authorization:** Required (JWT Token)
+
+**Response:**
+
+```json
+{
+  "totalRooms": 100,
+  "availableRooms": 25,
+  "occupiedRooms": 70,
+  "maintenanceRooms": 3,
+  "outOfServiceRooms": 2,
+  "occupancyRate": 70.0,
+  "byRoomType": [
+    {
+      "roomType": "1-BEDROOM",
+      "count": 40,
+      "occupied": 35
+    },
+    {
+      "roomType": "2-BEDROOM",
+      "count": 45,
+      "occupied": 30
+    },
+    {
+      "roomType": "3-BEDROOM",
+      "count": 15,
+      "occupied": 5
+    }
+  ],
+  "byFloor": [
+    {
+      "floor": "1",
+      "totalRooms": 25,
+      "occupiedRooms": 20
+    },
+    {
+      "floor": "2",
+      "totalRooms": 25,
+      "occupiedRooms": 18
+    }
+  ],
+  "revenueStats": {
+    "totalPotentialRent": 15000000,
+    "currentRentRevenue": 10500000,
+    "averageRent": 150000
+  }
+}
+```
+
+### Get Room by ID
+
+**GET** `/rooms/:id`
+
+**Description:** Get detailed information about a specific room.
+
+**Path Parameters:**
+- `id` (required): The room ID
+
+**Authorization:** Required (JWT Token)
+
+**Response:**
+
+```json
+{
+  "id": "507f1f77bcf86cd799439015",
+  "roomNumber": "A101",
+  "roomType": "1-BEDROOM",
+  "floor": "1",
+  "block": "A",
+  "description": "One bedroom apartment with balcony",
+  "status": "OCCUPIED",
+  "baseRent": 150000,
+  "deposit": 300000,
+  "specifications": {
+    "bedrooms": 1,
+    "bathrooms": 1,
+    "hasBalcony": true,
+    "area": "45sqm"
+  },
+  "cooperative": {
+    "id": "507f1f77bcf86cd799439012",
+    "name": "Green Valley Housing Cooperative",
+    "code": "GVH001",
+    "status": "ACTIVE"
+  },
+  "currentTenant": {
+    "id": "507f1f77bcf86cd799439014",
+    "phone": "+250788123456",
+    "firstName": "John",
+    "lastName": "Doe",
+    "assignedAt": "2025-01-15T08:00:00.000Z",
+    "startDate": "2025-01-15T08:00:00.000Z"
+  },
+  "createdAt": "2025-01-10T08:00:00.000Z",
+  "updatedAt": "2025-01-15T08:00:00.000Z"
+}
+```
+
+### Room Assignment with Notifications
+
+**POST** `/rooms/:id/assign`
+
+**Description:** Assign a tenant to a specific room. Automatically sends SMS and in-app notifications to the assigned user.
+
+**Path Parameters:**
+- `id` (required): The room ID
+
+**Authorization:** Super Admin, Organization Admin
+
+**Request Body:**
+
+```json
+{
+  "userId": "507f1f77bcf86cd799439014",
+  "startDate": "2025-01-15T08:00:00.000Z",
+  "endDate": null,
+  "notes": "Initial assignment"
+}
+```
+
+**Response:**
+
+```json
+{
+  "id": "507f1f77bcf86cd799439016",
+  "user": {
+    "id": "507f1f77bcf86cd799439014",
+    "phone": "+250788123456",
+    "firstName": "John",
+    "lastName": "Doe",
+    "email": "john.doe@example.com"
+  },
+  "cooperative": {
+    "id": "507f1f77bcf86cd799439012",
+    "name": "Green Valley Housing Cooperative",
+    "code": "GVH001",
+    "status": "ACTIVE"
+  },
+  "room": {
+    "id": "507f1f77bcf86cd799439015",
+    "roomNumber": "A101",
+    "roomType": "1-BEDROOM",
+    "floor": "1",
+    "block": "A",
+    "status": "OCCUPIED",
+    "baseRent": 150000,
+    "deposit": 300000
+  },
+  "startDate": "2025-01-15T08:00:00.000Z",
+  "endDate": null,
+  "isActive": true,
+  "notes": "Initial assignment",
+  "assignedAt": "2025-01-15T08:00:00.000Z",
+  "assignedBy": "507f1f77bcf86cd799439010",
+  "createdAt": "2025-01-15T08:00:00.000Z",
+  "updatedAt": "2025-01-15T08:00:00.000Z"
+}
+```
+
+**Business Rules:**
+- User cannot have multiple rooms in the same cooperative
+- User can have rooms in different cooperatives simultaneously
+- Room must be available for assignment
+- Automatic notifications sent to assigned user via SMS and in-app
+
+**Notifications Sent:**
+- **SMS**: "COPAY: [UserName], you've been assigned to Room [RoomNumber] at [CooperativeName]. Start date: [Date]. Welcome to your new home!"
+- **In-App**: "🏠 Room Assignment Successful! Dear [UserName], you have been successfully assigned to Room [RoomNumber] at [CooperativeName]. Welcome to your new home!"
+
+---
+
 ## Changelog & Versioning
+
+### 🆕 Recent Additions (November 2025)
+
+- **Room Management APIs**: Complete room CRUD with cooperative filtering
+- **Room Assignment System**: Automatic SMS and in-app notifications  
+- **Enhanced User Profile**: `/users/me` now includes all cooperatives with rooms
+- **Room Statistics**: Comprehensive room analytics by cooperative
+- **Multi-cooperative Support**: Users can belong to multiple cooperatives
 
 ### Version 1.0.0 (Current)
 
 - **Authentication System**: JWT-based auth with role management
-- **User Management**: Multi-tenant user operations
+- **User Management**: Multi-tenant user operations with enhanced cooperatives data
+- **Room Management**: Complete CRUD operations with assignment notifications
 - **Payment Integration**: IremboPay gateway with mobile money & banks
 - **Activity Tracking**: Comprehensive audit logging
 - **Reminder System**: Automated notifications with multi-channel support

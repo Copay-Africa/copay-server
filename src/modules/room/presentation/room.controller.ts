@@ -32,7 +32,7 @@ import {
 import { PaginatedResponseDto } from '../../../shared/dto/paginated-response.dto';
 import { JwtAuthGuard } from '../../../shared/guards/jwt-auth.guard';
 import { RolesGuard } from '../../../shared/guards/roles.guard';
-import { Roles } from '../../../shared/decorators/auth.decorator';
+import { Roles, Public } from '../../../shared/decorators/auth.decorator';
 import { CurrentUser } from '../../../shared/decorators/current-user.decorator';
 import { UserRole } from '@prisma/client';
 
@@ -72,6 +72,7 @@ export class RoomController {
   }
 
   @Get()
+  @Public()
   @ApiOperation({ summary: 'Get all rooms with filtering and pagination' })
   @ApiResponse({
     status: 200,
@@ -116,17 +117,12 @@ export class RoomController {
   @ApiQuery({
     name: 'cooperativeId',
     required: false,
-    description: 'Filter by cooperative ID (Super Admin only)',
+    description: 'Filter by cooperative ID',
   })
   async findAll(
     @Query() filterDto: RoomFilterDto,
-    @CurrentUser() currentUser: AuthenticatedUser,
   ): Promise<PaginatedResponseDto<RoomResponseDto>> {
-    return this.roomService.findAll(
-      filterDto,
-      currentUser.role,
-      currentUser.cooperativeId,
-    );
+    return this.roomService.findAll(filterDto);
   }
 
   @Get('assignments/cooperative/:cooperativeId')
