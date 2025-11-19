@@ -126,6 +126,46 @@ GET /rooms/user/:userId
 GET /rooms/me
 ```
 
+#### Get Room Statistics
+
+```http
+GET /rooms/stats?cooperativeId=507f1f77bcf86cd799439012
+```
+
+**Authorization**: All authenticated users  
+
+**Query Parameters**:
+
+- `cooperativeId` (optional for Super Admin, ignored for other roles): Cooperative ID to get stats for
+
+**Response**:
+
+```json
+{
+  "total": 50,
+  "occupied": 35,
+  "available": 10,
+  "maintenance": 3,
+  "reserved": 2,
+  "outOfService": 0,
+  "byType": [
+    { "roomType": "1BR", "count": 25 },
+    { "roomType": "2BR", "count": 20 },
+    { "roomType": "Studio", "count": 5 }
+  ],
+  "byFloor": [
+    { "floor": "1st Floor", "count": 15 },
+    { "floor": "2nd Floor", "count": 15 },
+    { "floor": "3rd Floor", "count": 20 }
+  ],
+  "byBlock": [
+    { "block": "Block A", "count": 25 },
+    { "block": "Block B", "count": 25 }
+  ],
+  "occupancyRate": 70.0
+}
+```
+
 ## Database Schema
 
 ### Room Model

@@ -681,6 +681,145 @@ export class RoomService {
   }
 
   /**
+   * Get room statistics for a cooperative
+   */
+  async getRoomStats(
+    cooperativeId?: string,
+    currentUserRole?: UserRole,
+    currentCooperativeId?: string,
+  ): Promise<{
+    total: number;
+    occupied: number;
+    available: number;
+    maintenance: number;
+    reserved: number;
+    outOfService: number;
+    byType: Array<{ roomType: string; count: number }>;
+    byFloor: Array<{ floor: string; count: number }>;
+    byBlock: Array<{ block: string; count: number }>;
+    occupancyRate: number;
+  }> {
+    // Determine which cooperative to query
+    let targetCooperativeId = cooperativeId;
+    
+    // Check tenant isolation
+    if (currentUserRole !== UserRole.SUPER_ADMIN) {
+      if (!currentCooperativeId) {
+        throw new ForbiddenException('Access denied - no cooperative assigned');
+      }
+      if (cooperativeId && cooperativeId !== currentCooperativeId) {
+        throw new ForbiddenException('Access denied to specified cooperative');
+      }
+      targetCooperativeId = currentCooperativeId;
+    } else if (!cooperativeId) {
+      throw new BadRequestException('cooperativeId is required for super admin');
+    }
+
+    // Get basic room counts
+    const [
+      total,
+      occupied,
+      available,
+      maintenance,
+      reserved,
+      outOfService,
+      byTypeData,
+      byFloorData,
+      byBlockData,
+    ] = await Promise.all([
+      // Total rooms
+      this.prismaService.room.count({
+        where: { cooperativeId: targetCooperativeId },
+      }),
+      // Occupied rooms
+      this.prismaService.room.count({
+        where: {
+          cooperativeId: targetCooperativeId,
+          status: 'OCCUPIED',
+        },
+      }),
+      // Available rooms
+      this.prismaService.room.count({
+        where: {
+          cooperativeId: targetCooperativeId,
+          status: 'AVAILABLE',
+        },
+      }),
+      // Maintenance rooms
+      this.prismaService.room.count({
+        where: {
+          cooperativeId: targetCooperativeId,
+          status: 'MAINTENANCE',
+        },
+      }),
+      // Reserved rooms
+      this.prismaService.room.count({
+        where: {
+          cooperativeId: targetCooperativeId,
+          status: 'RESERVED',
+        },
+      }),
+      // Out of service rooms
+      this.prismaService.room.count({
+        where: {
+          cooperativeId: targetCooperativeId,
+          status: 'OUT_OF_SERVICE',
+        },
+      }),
+      // Group by room type
+      this.prismaService.room.groupBy({
+        by: ['roomType'],
+        where: { cooperativeId: targetCooperativeId },
+        _count: true,
+      }),
+      // Group by floor
+      this.prismaService.room.groupBy({
+        by: ['floor'],
+        where: { cooperativeId: targetCooperativeId },
+        _count: true,
+      }),
+      // Group by block
+      this.prismaService.room.groupBy({
+        by: ['block'],
+        where: { cooperativeId: targetCooperativeId },
+        _count: true,
+      }),
+    ]);
+
+    // Calculate occupancy rate
+    const occupancyRate = total > 0 ? (occupied / total) * 100 : 0;
+
+    // Format grouped data
+    const byType = byTypeData.map((item) => ({
+      roomType: item.roomType || 'Unknown',
+      count: item._count,
+    }));
+
+    const byFloor = byFloorData.map((item) => ({
+      floor: item.floor || 'Unknown',
+      count: item._count,
+    }));
+
+    const byBlock = byBlockData.map((item) => ({
+      block: item.block || 'Unknown',
+      count: item._count,
+    }));
+
+    return {
+      total,
+      occupied,
+      available,
+      maintenance,
+      reserved,
+      outOfService,
+      byType,
+      byFloor,
+      byBlock,
+      occupancyRate: Math.round(occupancyRate * 100) / 100, // Round to 2 decimal places
+    };
+  }
+
+  /**
    * Map room to response DTO
    */
   private mapToResponseDto(room: any): RoomResponseDto {

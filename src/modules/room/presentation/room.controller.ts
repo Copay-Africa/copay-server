@@ -178,6 +178,29 @@ export class RoomController {
     return this.roomService.getUserRooms(currentUser.id);
   }
 
+  @Get('stats')
+  @ApiOperation({ summary: 'Get room statistics for cooperative' })
+  @ApiQuery({
+    name: 'cooperativeId',
+    required: false,
+    description: 'Cooperative ID (required for org admins)',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Room statistics retrieved successfully',
+    type: 'object',
+  })
+  async getRoomStats(
+    @CurrentUser() currentUser: AuthenticatedUser,
+    @Query('cooperativeId') cooperativeId?: string,
+  ): Promise<any> {
+    return this.roomService.getRoomStats(
+      cooperativeId,
+      currentUser.role,
+      currentUser.cooperativeId,
+    );
+  }
+
   @Get(':id')
   @ApiOperation({ summary: 'Get room by ID' })
   @ApiParam({ name: 'id', description: 'Room ID' })
