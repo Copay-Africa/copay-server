@@ -79,10 +79,16 @@ export class CurrentUserResponseDto {
   status: UserStatus;
 
   @ApiPropertyOptional({
-    description: 'Cooperative details',
+    description: 'Primary cooperative details (for backward compatibility)',
     type: CooperativeDetailsDto,
   })
   cooperative?: CooperativeDetailsDto;
+
+  @ApiPropertyOptional({
+    description: 'All cooperatives the user belongs to with their rooms',
+    type: [CooperativeDetailsDto],
+  })
+  cooperatives?: CooperativeDetailsDto[];
 
   @ApiPropertyOptional({
     description: 'Last login timestamp',

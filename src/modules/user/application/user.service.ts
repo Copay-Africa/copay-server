@@ -185,7 +185,10 @@ export class UserService {
       throw new ForbiddenException('User account is not active');
     }
 
-    return this.mapToCurrentUserResponseDto(user);
+    // Get all cooperatives the user belongs to with rooms
+    const userCooperatives = await this.getUserCooperatives(userId);
+
+    return this.mapToCurrentUserResponseDto(user, userCooperatives);
   }
 
   async getUserCooperatives(userId: string): Promise<CooperativeDetailsDto[]> {
@@ -737,7 +740,10 @@ export class UserService {
     };
   }
 
-  private mapToCurrentUserResponseDto(user: any): CurrentUserResponseDto {
+  private mapToCurrentUserResponseDto(
+    user: any,
+    cooperatives?: CooperativeDetailsDto[],
+  ): CurrentUserResponseDto {
     return {
       id: user.id,
       phone: user.phone,
@@ -754,6 +760,7 @@ export class UserService {
             status: user.cooperative.status,
           }
         : undefined,
+      cooperatives: cooperatives || [],
       lastLoginAt: user.lastLoginAt,
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,

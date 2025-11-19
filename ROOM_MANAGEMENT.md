@@ -9,7 +9,8 @@ This document describes the comprehensive Room Management system implemented for
 - **Role-based access control** (Super Admin, Organization Admin, Tenant)
 - **Multi-cooperative tenant support** - tenants can belong to multiple cooperatives
 - **One room per cooperative per tenant** - enforces business rule preventing multiple room assignments
-- **Room assignment/unassignment** workflows
+- **Room assignment/unassignment** workflows with **automatic notifications**
+- **SMS and in-app notifications** when users are assigned to rooms
 - **Comprehensive filtering and pagination**
 - **Payment integration** ready (every payment linked to tenant + room + organization)
 
@@ -94,6 +95,7 @@ POST /rooms/:id/assign
   "notes": "Initial assignment"
 }
 ```
+**Notifications**: Automatically sends SMS and in-app notifications to the assigned user upon successful assignment.
 
 #### Unassign User from Room
 ```http

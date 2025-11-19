@@ -389,7 +389,7 @@ Some endpoints are public and don't require authentication:
 
 **GET** `/users/me`
 
-**Description:** Get the authenticated user's profile information based on JWT token.
+**Description:** Get the authenticated user's profile information based on JWT token. Now includes all cooperatives the user belongs to with their rooms.
 
 **Response:**
 
@@ -408,11 +408,60 @@ Some endpoints are public and don't require authentication:
     "code": "GVH001",
     "status": "ACTIVE"
   },
+  "cooperatives": [
+    {
+      "id": "507f1f77bcf86cd799439012",
+      "name": "Green Valley Housing Cooperative",
+      "code": "GVH001",
+      "status": "ACTIVE",
+      "rooms": [
+        {
+          "id": "507f1f77bcf86cd799439020",
+          "roomNumber": "101",
+          "roomType": "1BR",
+          "floor": "1st Floor",
+          "block": "Block A",
+          "status": "OCCUPIED",
+          "baseRent": 500.00,
+          "deposit": 1000.00,
+          "isUserAssigned": true,
+          "assignmentStartDate": "2025-01-15T00:00:00.000Z"
+        }
+      ]
+    },
+    {
+      "id": "507f1f77bcf86cd799439013",
+      "name": "Urban Savings Cooperative",
+      "code": "USC002",
+      "status": "ACTIVE",
+      "rooms": [
+        {
+          "id": "507f1f77bcf86cd799439021",
+          "roomNumber": "205",
+          "roomType": "2BR",
+          "floor": "2nd Floor",
+          "block": "Block B",
+          "status": "AVAILABLE",
+          "baseRent": 750.00,
+          "deposit": 1500.00,
+          "isUserAssigned": false,
+          "assignmentStartDate": null
+        }
+      ]
+    }
+  ],
   "lastLoginAt": "2025-11-15T10:30:00.000Z",
   "createdAt": "2025-01-15T08:00:00.000Z",
   "updatedAt": "2025-11-15T10:30:00.000Z"
 }
 ```
+
+**New Features:**
+- `cooperative`: Primary cooperative (for backward compatibility)
+- `cooperatives`: Array of all cooperatives with their rooms
+- Each cooperative includes `rooms` array with room details and user assignment status
+- `isUserAssigned`: Boolean indicating if the current user is assigned to this room
+- `assignmentStartDate`: Date when user was assigned to the room (null if not assigned)
 
 #### Get User Cooperatives
 

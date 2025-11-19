@@ -17,6 +17,7 @@ export interface NotificationContext {
   reminderId?: string;
   paymentId?: string;
   complaintId?: string;
+  roomAssignmentId?: string;
 }
 
 @Injectable()
@@ -103,6 +104,39 @@ export class NotificationService {
       } catch (error) {
         console.error(
           `❌ Failed to send ${type} notification for complaint ${complaint.id}:`,
+          error.message,
+        );
+      }
+    }
+  }
+
+  async sendRoomAssignmentNotification(
+    assignment: any,
+    user: any,
+    notificationTypes: NotificationType[],
+    title: string,
+    message: string,
+  ): Promise<void> {
+    const context: NotificationContext = {
+      userId: user.id,
+      cooperativeId: assignment.cooperativeId,
+      roomAssignmentId: assignment.id,
+    };
+
+    for (const type of notificationTypes) {
+      try {
+        await this.sendNotification(
+          type,
+          { title, message, roomAssignment: assignment },
+          user,
+          context,
+        );
+        console.log(
+          `✅ ${type} notification sent for room assignment ${assignment.id}`,
+        );
+      } catch (error) {
+        console.error(
+          `❌ Failed to send ${type} notification for room assignment ${assignment.id}:`,
           error.message,
         );
       }

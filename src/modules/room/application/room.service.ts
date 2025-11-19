@@ -6,6 +6,8 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from '../../../prisma/prisma.service';
+import { NotificationService } from '../../notification/application/notification.service';
+import { SmsService } from '../../sms/application/sms.service';
 import { CreateRoomDto } from '../presentation/dto/create-room.dto';
 import { UpdateRoomDto } from '../presentation/dto/update-room.dto';
 import { RoomFilterDto } from '../presentation/dto/room-filter.dto';
@@ -16,11 +18,15 @@ import {
 import { RoomResponseDto } from '../presentation/dto/room-response.dto';
 import { UserRoomResponseDto } from '../presentation/dto/user-room-response.dto';
 import { PaginatedResponseDto } from '../../../shared/dto/paginated-response.dto';
-import { RoomStatus, UserRole } from '@prisma/client';
+import { RoomStatus, UserRole, NotificationType } from '@prisma/client';
 
 @Injectable()
 export class RoomService {
-  constructor(private prismaService: PrismaService) {}
+  constructor(
+    private prismaService: PrismaService,
+    private notificationService: NotificationService,
+    private smsService: SmsService,
+  ) {}
 
   /**
    * Create a new room
@@ -382,6 +388,59 @@ export class RoomService {
   }
 
   /**
+   * Send notifications when a user is assigned to a room
+   */
+  private async sendRoomAssignmentNotifications(
+    assignment: any,
+    room: any,
+  ): Promise<void> {
+    const { user, cooperative } = assignment;
+    
+    if (!user || !user.phone) {
+      console.warn(`Cannot send notifications - missing user data for assignment ${assignment.id}`);
+      return;
+    }
+
+    const userName = user.firstName 
+      ? `${user.firstName}${user.lastName ? ` ${user.lastName}` : ''}`
+      : 'Tenant';
+    
+    const roomInfo = `Room ${room.roomNumber}${room.block ? ` (${room.block})` : ''}`;
+    const cooperativeName = cooperative?.name || 'your cooperative';
+    
+    // Create notification content
+    const title = '🏠 Room Assignment Successful!';
+    const message = `Dear ${userName}, you have been successfully assigned to ${roomInfo} at ${cooperativeName}. Welcome to your new home!`;
+    
+    // Send SMS notification
+    const smsMessage = `COPAY: ${userName}, you've been assigned to ${roomInfo} at ${cooperativeName}. Start date: ${assignment.startDate.toLocaleDateString()}. Welcome to your new home!`;
+    
+    try {
+      // Send SMS directly
+      await this.smsService.sendSms(
+        user.phone,
+        smsMessage,
+        `room-assignment-${assignment.id}`,
+      );
+      
+      // Send in-app notification through notification service
+      await this.notificationService.sendRoomAssignmentNotification(
+        assignment,
+        user,
+        [NotificationType.IN_APP],
+        title,
+        message,
+      );
+      
+      console.log(`✅ Room assignment notifications sent to user ${user.id} for room ${room.roomNumber}`);
+      
+    } catch (error) {
+      console.error(`❌ Failed to send room assignment notifications:`, error.message);
+      throw error;
+    }
+  }
+
+  /**
    * Assign user to room
    */
   async assignRoom(
@@ -505,6 +564,17 @@ export class RoomService {
         data: { status: RoomStatus.OCCUPIED },
       }),
     ]);
+
+    // Send notifications after successful assignment
+    try {
+      await this.sendRoomAssignmentNotifications(assignment, room);
+    } catch (notificationError) {
+      console.error(
+        `Failed to send room assignment notifications for user ${assignRoomDto.userId}:`,
+        notificationError.message,
+      );
+      // Don't throw - assignment was successful, notifications are supplementary
+    }
 
     return this.mapToUserRoomResponseDto(assignment);
   }
