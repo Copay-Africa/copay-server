@@ -38,6 +38,10 @@ export class AccountRequestService {
     const { fullName, phone, cooperativeId, roomNumber } =
       createAccountRequestDto;
 
+    this.logger.log(
+      `Creating account request - Name: ${fullName}, Phone: ${phone}, Cooperative: ${cooperativeId}, Room: ${roomNumber}`,
+    );
+
     // Check if cooperative exists
     const cooperative = await this.prismaService.cooperative.findUnique({
       where: { id: cooperativeId },
@@ -65,11 +69,38 @@ export class AccountRequestService {
         phone,
         userId: { not: null }, // Has been approved and linked to a user
       },
+      include: {
+        cooperative: { select: { name: true } },
+        user: { select: { id: true, firstName: true, lastName: true } },
+      },
     });
 
     if (existingUserRequest) {
+      const cooperativeName = existingUserRequest.cooperative?.name || 'a cooperative';
+      this.logger.warn(
+        `Blocked duplicate request - Phone: ${phone} already has approved account in ${cooperativeName}, Request ID: ${existingUserRequest.id}, User ID: ${existingUserRequest.userId}`,
+      );
       throw new ConflictException(
-        'An account request for this phone number has already been processed',
+        `This phone number already has an approved account with ${cooperativeName}. Each phone number can only have one active account.`,
+      );
+    }
+
+    // Additional check: Look for any existing account request with userId set (debugging)
+    const allExistingRequests = await this.prismaService.accountRequest.findMany({
+      where: { phone },
+      select: {
+        id: true,
+        phone: true,
+        status: true,
+        userId: true,
+        cooperativeId: true,
+        cooperative: { select: { name: true } },
+      },
+    });
+
+    if (allExistingRequests.length > 0) {
+      this.logger.debug(
+        `Existing account requests for ${phone}: ${JSON.stringify(allExistingRequests)}`,
       );
     }
 
@@ -174,8 +205,17 @@ export class AccountRequestService {
 
       return this.mapToResponseDto(accountRequest);
     } catch (error: any) {
+      this.logger.error(
+        `Failed to create account request for ${phone}: ${error.message}`,
+        error.stack,
+      );
+      
       if (error?.code === 'P2002') {
         const constraint = error?.meta?.target;
+        this.logger.error(
+          `Unique constraint violation: ${constraint}, Phone: ${phone}, Cooperative: ${cooperativeId}`,
+        );
+        
         if (constraint?.includes('userId')) {
           throw new ConflictException(
             'An account request for this user has already been processed',
