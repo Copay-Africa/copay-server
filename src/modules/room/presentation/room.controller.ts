@@ -20,15 +20,12 @@ import {
   ApiBearerAuth,
 } from '@nestjs/swagger';
 import { RoomService } from '../application/room.service';
-import {
-  CreateRoomDto,
-  UpdateRoomDto,
-  RoomResponseDto,
-  RoomFilterDto,
-  AssignRoomDto,
-  UnassignRoomDto,
-  UserRoomResponseDto,
-} from './dto';
+import { CreateRoomDto } from './dto/create-room.dto';
+import { UpdateRoomDto } from './dto/update-room.dto';
+import { RoomResponseDto } from './dto/room-response.dto';
+import { RoomFilterDto } from './dto/room-filter.dto';
+import { AssignRoomDto, UnassignRoomDto } from './dto/assign-room.dto';
+import { UserRoomResponseDto } from './dto/user-room-response.dto';
 import { PaginatedResponseDto } from '../../../shared/dto/paginated-response.dto';
 import { JwtAuthGuard } from '../../../shared/guards/jwt-auth.guard';
 import { RolesGuard } from '../../../shared/guards/roles.guard';

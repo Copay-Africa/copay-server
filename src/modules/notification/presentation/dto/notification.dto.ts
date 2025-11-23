@@ -1,7 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { NotificationType, NotificationStatus } from '@prisma/client';
 
-export class NotificationResponseDto {
+class NotificationResponseDto {
   @ApiProperty({ example: '507f1f77bcf86cd799439020' })
   id: string;
 

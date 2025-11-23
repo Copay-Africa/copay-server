@@ -8,69 +8,105 @@ import { ConfigService } from '@nestjs/config';
 import { AppModule } from './app.module';
 import { PrismaService } from './prisma/prisma.service';
 import { setupSwagger } from './config/swagger.config';
+import { SecurityMiddleware } from './shared/middlewares/security.middleware';
 import fastifyCompress from '@fastify/compress';
+import fastifyHelmet from '@fastify/helmet';
 
 async function bootstrap() {
   const logger = new Logger('Bootstrap');
 
-  // Memory optimization for production
   if (process.env.NODE_ENV === 'production') {
-    // Force garbage collection more frequently when available (guarded to satisfy TS)
     if (typeof (global as any).gc === 'function') {
       setInterval(() => {
         try {
           (global as any).gc();
         } catch (err) {
-          // ignore if GC fails; this is best-effort and only works when Node started with --expose-gc
+          // ignore if GC fails
         }
-      }, 30000); // Run GC every 30 seconds
+      }, 30000);
     }
   }
 
-  // Create Fastify app instance with memory-optimized settings
+  // Create Fastify app instance with optimized settings
   const app = await NestFactory.create<NestFastifyApplication>(
     AppModule,
     new FastifyAdapter({
       logger: process.env.NODE_ENV === 'development',
       trustProxy: true,
-      maxParamLength: 1000, // Limit parameter length
+      maxParamLength: 1000,
       bodyLimit: 1048576 * 10, // 10MB body limit
+      ignoreTrailingSlash: true,
+      caseSensitive: false,
+      requestIdHeader: 'x-request-id',
+      requestIdLogLabel: 'reqId',
     }),
   );
 
-  // Get config service
   const configService = app.get(ConfigService);
 
-  // Ensure Prisma client is imported and connected early (see https://pris.ly/d/importing-client)
+  await app.register(fastifyHelmet, {
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        scriptSrc: ["'self'"],
+        imgSrc: ["'self'", 'data:', 'https:'],
+      },
+    },
+    hsts: {
+      maxAge: 31536000,
+      includeSubDomains: true,
+      preload: true,
+    },
+  });
+
   try {
     const prisma = app.get(PrismaService);
     if (prisma && typeof prisma.$connect === 'function') {
-      prisma.$connect().catch(() => null);
+      await prisma.$connect();
+      logger.log('Database connection established');
     }
   } catch (err) {
-    logger.error('PrismaService not available at bootstrap', err);
+    logger.error('PrismaService connection failed:', err);
+    process.exit(1);
   }
 
-  // Enable CORS
+  const corsConfig = configService.get('security.cors');
   const corsOrigins = configService.get('app.corsOrigin');
+
   await app.enableCors({
     origin: corsOrigins,
-    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
-    credentials: true,
+    methods: corsConfig.methods,
+    allowedHeaders: corsConfig.allowedHeaders,
+    credentials: corsConfig.credentials,
+    optionsSuccessStatus: corsConfig.optionsSuccessStatus,
+    maxAge: corsConfig.maxAge,
   });
 
-  // Global validation pipe
+  // Validation pipe with security configurations
+  const validationConfig = configService.get('security.validation');
   app.useGlobalPipes(
     new ValidationPipe({
-      whitelist: true,
-      forbidNonWhitelisted: true,
-      transform: true,
+      whitelist: validationConfig.whitelist,
+      forbidNonWhitelisted: validationConfig.forbidNonWhitelisted,
+      transform: validationConfig.transform,
       transformOptions: {
         enableImplicitConversion: true,
       },
+      disableErrorMessages: validationConfig.disableErrorMessages,
+      validationError: validationConfig.validationError,
     }),
   );
+
+  // Compression with optimized settings
+  if (configService.get('app.enableCompression')) {
+    const compressionConfig = configService.get('performance.api.compression');
+    await app.register(fastifyCompress, {
+      threshold: compressionConfig.threshold,
+      global: true,
+      encodings: ['gzip', 'deflate'],
+    });
+  }
 
   // Set global prefix
   const apiPrefix = configService.get('app.apiPrefix');
@@ -84,19 +120,15 @@ async function bootstrap() {
     );
   }
 
-  // Enable compression
-  if (configService.get('app.enableCompression')) {
-    await app.register(fastifyCompress);
-  }
-
-  // Start server
+  // Start server with timeout
   const port = configService.get('app.port');
+  const timeout = configService.get('security.api.timeout') || 30000;
+
   await app.listen(port, '0.0.0.0');
 
   logger.log(
     `🚀 Application is running on: http://localhost:${port}/${apiPrefix}`,
   );
-  logger.log(`📚 Environment: ${configService.get('app.nodeEnv')}`);
 }
 
 bootstrap().catch((err) => {

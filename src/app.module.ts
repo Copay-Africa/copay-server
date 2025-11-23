@@ -2,7 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { ScheduleModule } from '@nestjs/schedule';
-import { APP_GUARD } from '@nestjs/core';
+import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { HealthController } from './health.controller';
@@ -21,6 +21,9 @@ import { NotificationModule } from './modules/notification/notification.module';
 import { AnnouncementModule } from './modules/announcement/announcement.module';
 import { CooperativeCategoryModule } from './modules/cooperative-category/cooperative-category.module';
 import { JwtAuthGuard } from './shared/guards/jwt-auth.guard';
+import { EnhancedCacheService } from './shared/services/enhanced-cache.service';
+import { PerformanceMonitoringService } from './shared/services/performance-monitoring.service';
+import { PerformanceInterceptor } from './shared/interceptors/performance.interceptor';
 import { CacheConfigModule } from './config/cache.module';
 import {
   databaseConfig,
@@ -30,8 +33,10 @@ import {
   rateLimitConfig,
   smsConfig,
   firebaseConfig,
-  validateConfig,
-} from './config';
+} from './config/configuration';
+import { securityConfig } from './config/security.config';
+import { performanceConfig } from './config/performance.config';
+import { validateConfig } from './config/config.validation';
 
 @Module({
   imports: [
@@ -46,6 +51,8 @@ import {
         rateLimitConfig,
         smsConfig,
         firebaseConfig,
+        securityConfig,
+        performanceConfig,
       ],
       validate: validateConfig,
       envFilePath: ['.env'],
@@ -99,9 +106,15 @@ import {
   providers: [
     AppService,
     PrismaService,
+    EnhancedCacheService,
+    PerformanceMonitoringService,
     {
       provide: APP_GUARD,
       useClass: JwtAuthGuard,
+    },
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: PerformanceInterceptor,
     },
   ],
 })

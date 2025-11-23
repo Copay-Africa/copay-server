@@ -22,12 +22,3 @@ export const CurrentUser = createParamDecorator(
     return data ? user?.[data] : user;
   },
 );
-
-export const CurrentCooperativeId = createParamDecorator(
-  (data: unknown, ctx: ExecutionContext): string | undefined => {
-    const request = ctx
-      .switchToHttp()
-      .getRequest<FastifyRequest & { user: AuthenticatedUser }>();
-    return request.user?.cooperativeId;
-  },
-);

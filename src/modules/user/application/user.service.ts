@@ -19,11 +19,15 @@ import { TenantDetailResponseDto } from '../presentation/dto/tenant-detail-respo
 import { PaginationDto } from '../../../shared/dto/pagination.dto';
 import { PaginatedResponseDto } from '../../../shared/dto/paginated-response.dto';
 import { UserRole, UserStatus } from '@prisma/client';
+import { EnhancedCacheService } from '../../../shared/services/enhanced-cache.service';
 import * as bcrypt from 'bcryptjs';
 
 @Injectable()
 export class UserService {
-  constructor(private prismaService: PrismaService) {}
+  constructor(
+    private prismaService: PrismaService,
+    private cacheService: EnhancedCacheService,
+  ) {}
 
   async create(
     createUserDto: CreateUserDto,
@@ -124,6 +128,17 @@ export class UserService {
     currentUserRole?: UserRole,
     currentCooperativeId?: string,
   ): Promise<UserResponseDto> {
+    // Try to get from cache first
+    const cacheKey = `user:${id}:${currentCooperativeId || 'all'}`;
+    const cachedUser = await this.cacheService.get<UserResponseDto>(
+      cacheKey,
+      'user',
+    );
+
+    if (cachedUser) {
+      return cachedUser;
+    }
+
     const user = await this.prismaService.user.findUnique({
       where: { id },
       include: { cooperative: true },
@@ -141,7 +156,27 @@ export class UserService {
       throw new ForbiddenException('Access denied');
     }
 
-    return this.mapToResponseDto(user);
+    const userResponse: UserResponseDto = {
+      id: user.id,
+      phone: user.phone,
+      firstName: user.firstName || undefined,
+      lastName: user.lastName || undefined,
+      email: user.email || undefined,
+      role: user.role,
+      status: user.status,
+      cooperativeId: user.cooperativeId || undefined,
+      createdAt: user.createdAt,
+      updatedAt: user.updatedAt,
+    };
+
+    // Cache the response for 5 minutes
+    await this.cacheService.set(cacheKey, userResponse, {
+      prefix: 'user',
+      ttl: 300,
+      tags: [`user:${id}`, `cooperative:${user.cooperativeId}`],
+    });
+
+    return userResponse;
   }
 
   async updateStatus(id: string, status: UserStatus): Promise<UserResponseDto> {
@@ -159,10 +194,24 @@ export class UserService {
       include: { cooperative: true },
     });
 
+    // Invalidate cache for this user
+    await this.cacheService.invalidateByTags([`user:${id}`]);
+
     return this.mapToResponseDto(updatedUser);
   }
 
   async getCurrentUser(userId: string): Promise<CurrentUserResponseDto> {
+    // Try cache first
+    const cacheKey = `current-user:${userId}`;
+    const cachedUser = await this.cacheService.get<CurrentUserResponseDto>(
+      cacheKey,
+      'user',
+    );
+
+    if (cachedUser) {
+      return cachedUser;
+    }
+
     const user = await this.prismaService.user.findUnique({
       where: { id: userId },
       include: {
@@ -188,7 +237,16 @@ export class UserService {
     // Get all cooperatives the user belongs to with rooms
     const userCooperatives = await this.getUserCooperatives(userId);
 
-    return this.mapToCurrentUserResponseDto(user, userCooperatives);
+    const result = this.mapToCurrentUserResponseDto(user, userCooperatives);
+
+    // Cache for 2 minutes (user data changes frequently)
+    await this.cacheService.set(cacheKey, result, {
+      prefix: 'user',
+      ttl: 120,
+      tags: [`user:${userId}`, `user-cooperatives:${userId}`],
+    });
+
+    return result;
   }
 
   async getUserCooperatives(userId: string): Promise<CooperativeDetailsDto[]> {
@@ -258,18 +316,20 @@ export class UserService {
       name: coop.name,
       code: coop.code,
       status: coop.status as any,
-      rooms: coop.rooms.map((room): CooperativeRoomDto => ({
-        id: room.id,
-        roomNumber: room.roomNumber,
-        roomType: room.roomType ?? undefined,
-        floor: room.floor ?? undefined,
-        block: room.block ?? undefined,
-        status: room.status,
-        baseRent: room.baseRent ?? undefined,
-        deposit: room.deposit ?? undefined,
-        isUserAssigned: room.userCooperativeRooms.length > 0,
-        assignmentStartDate: room.userCooperativeRooms[0]?.startDate,
-      })),
+      rooms: coop.rooms.map(
+        (room): CooperativeRoomDto => ({
+          id: room.id,
+          roomNumber: room.roomNumber,
+          roomType: room.roomType ?? undefined,
+          floor: room.floor ?? undefined,
+          block: room.block ?? undefined,
+          status: room.status,
+          baseRent: room.baseRent ?? undefined,
+          deposit: room.deposit ?? undefined,
+          isUserAssigned: room.userCooperativeRooms.length > 0,
+          assignmentStartDate: room.userCooperativeRooms[0]?.startDate,
+        }),
+      ),
     }));
   }
 
