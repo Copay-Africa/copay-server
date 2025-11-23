@@ -96,6 +96,32 @@ export class AccountRequestService {
       }
     }
 
+    // CRITICAL CHECK: Look for any account request with userId set to avoid constraint violation
+    const requestsWithUserId = await this.prismaService.accountRequest.findMany({
+      where: {
+        userId: { not: null },
+      },
+      select: {
+        id: true,
+        phone: true,
+        userId: true,
+        status: true,
+        cooperative: { select: { name: true } },
+      },
+    });
+
+    this.logger.debug(
+      `All account requests with userId set: ${JSON.stringify(requestsWithUserId)}`,
+    );
+
+    // Check if there are any records that might cause constraint issues
+    const conflictingUserIds = requestsWithUserId.map(req => req.userId);
+    if (conflictingUserIds.length > 0) {
+      this.logger.warn(
+        `Found ${conflictingUserIds.length} account requests with userId set. This might cause constraint violations.`,
+      );
+    }
+
     // Check if there's already a pending request for this phone and cooperative
     const existingRequest = await this.prismaService.accountRequest.findUnique({
       where: {
@@ -157,7 +183,7 @@ export class AccountRequestService {
       throw new ConflictException('This room number is already occupied');
     }
 
-    // Create the account request
+    // Create the account request using upsert to avoid constraint issues
     try {
       this.logger.log(
         `About to create account request with data: ${JSON.stringify({
@@ -169,14 +195,29 @@ export class AccountRequestService {
         })}`,
       );
       
-      const accountRequest = await this.prismaService.accountRequest.create({
-        data: {
+      // Use a unique identifier for the where clause that won't conflict
+      const uniqueIdentifier = `${phone}_${cooperativeId}_${Date.now()}`;
+      
+      const accountRequest = await this.prismaService.accountRequest.upsert({
+        where: {
+          phone_cooperativeId: {
+            phone,
+            cooperativeId,
+          },
+        },
+        create: {
           fullName,
           phone,
           cooperativeId,
           roomNumber,
           status: AccountRequestStatus.PENDING,
-          // Explicitly NOT setting userId - it should remain null until approval
+          // Do NOT set userId at all - let Prisma handle it as undefined/null
+        },
+        update: {
+          fullName, // Update the name if request already exists
+          roomNumber, // Update room number
+          status: AccountRequestStatus.PENDING, // Reset to pending
+          updatedAt: new Date(),
         },
         include: {
           cooperative: {
@@ -220,6 +261,16 @@ export class AccountRequestService {
         );
         
         if (constraint?.includes('userId')) {
+          // Get more debugging info about the constraint violation
+          const allUsersWithRequests = await this.prismaService.accountRequest.findMany({
+            where: { userId: { not: null } },
+            select: { id: true, phone: true, userId: true, status: true },
+          }).catch(() => []);
+          
+          this.logger.error(
+            `DEBUG: All account requests with userId: ${JSON.stringify(allUsersWithRequests)}`,
+          );
+          
           // Instead of our custom message, let's provide debugging info
           throw new ConflictException(
             `Database constraint error: A record with this user reference already exists. Please contact support if this persists. (Phone: ${phone})`,
@@ -644,6 +695,61 @@ export class AccountRequestService {
       limit,
       totalPages: Math.ceil(total / limit),
       organizationInfo: cooperative || undefined,
+    };
+  }
+
+  /**
+   * Debug method to check database state and potentially fix corruption
+   * This can help identify why the userId constraint is failing
+   */
+  async debugAccountRequestState(): Promise<{
+    totalRequests: number;
+    requestsWithUserId: any[];
+    potentialCorruption: boolean;
+    recommendations: string[];
+  }> {
+    const allRequests = await this.prismaService.accountRequest.findMany({
+      select: {
+        id: true,
+        phone: true,
+        userId: true,
+        status: true,
+        cooperativeId: true,
+        createdAt: true,
+      },
+    });
+
+    const requestsWithUserId = allRequests.filter(req => req.userId !== null);
+    const userIdCounts: Record<string, number> = {};
+    
+    requestsWithUserId.forEach(req => {
+      if (req.userId) {
+        userIdCounts[req.userId] = (userIdCounts[req.userId] || 0) + 1;
+      }
+    });
+
+    const duplicateUserIds = Object.entries(userIdCounts).filter(([_, count]) => (count as number) > 1);
+    const potentialCorruption = duplicateUserIds.length > 0;
+
+    const recommendations: string[] = [];
+    if (potentialCorruption) {
+      recommendations.push('Found duplicate userId values in account requests');
+      recommendations.push('Consider running data cleanup to remove duplicate entries');
+    }
+    if (requestsWithUserId.length > 0) {
+      recommendations.push(`Found ${requestsWithUserId.length} requests with userId set`);
+    }
+
+    return {
+      totalRequests: allRequests.length,
+      requestsWithUserId: requestsWithUserId.map(req => ({
+        id: req.id,
+        phone: req.phone,
+        userId: req.userId,
+        status: req.status,
+      })),
+      potentialCorruption,
+      recommendations,
     };
   }
 

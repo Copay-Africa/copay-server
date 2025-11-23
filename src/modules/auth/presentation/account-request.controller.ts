@@ -282,6 +282,26 @@ export class AccountRequestController {
     return this.accountRequestService.deleteAccountRequest(id);
   }
 
+  @Roles('SUPER_ADMIN')
+  @Get('debug/database-state')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Debug database state (Super Admin only)',
+    description: 'Check for data corruption and constraint issues in account requests',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Database state information returned successfully',
+  })
+  async debugDatabaseState(): Promise<{
+    totalRequests: number;
+    requestsWithUserId: any[];
+    potentialCorruption: boolean;
+    recommendations: string[];
+  }> {
+    return this.accountRequestService.debugAccountRequestState();
+  }
+
   @Public()
   @Get('cooperative/:cooperativeId/check')
   @ApiOperation({
