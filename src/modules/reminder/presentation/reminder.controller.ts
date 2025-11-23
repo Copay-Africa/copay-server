@@ -226,4 +226,34 @@ export class ReminderController {
       currentUser.cooperativeId,
     );
   }
+
+  @Get('stats')
+  @Roles('ORGANIZATION_ADMIN', 'SUPER_ADMIN')
+  @ApiOperation({
+    summary: 'Get reminder statistics',
+    description: 'Get basic reminder processing statistics',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Reminder statistics retrieved',
+    schema: {
+      type: 'object',
+      properties: {
+        totalActive: { type: 'number' },
+        totalOverdue: { type: 'number' },
+        totalCompleted: { type: 'number' },
+        dueToday: { type: 'number' },
+        lastProcessedAt: { type: 'string' },
+      },
+    },
+  })
+  async getReminderStats(): Promise<{
+    totalActive: number;
+    totalOverdue: number;
+    totalCompleted: number;
+    dueToday: number;
+    lastProcessedAt: string;
+  }> {
+    return await this.reminderService.getReminderStats();
+  }
 }

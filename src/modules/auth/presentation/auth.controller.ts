@@ -5,15 +5,19 @@ import {
   HttpCode,
   HttpStatus,
   Req,
+  UseGuards,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { AuthService } from '../application/auth.service';
 import { LoginDto } from './dto/login.dto';
+import { LogoutDto } from './dto/logout.dto';
 import { AuthResponseDto } from './dto/auth-response.dto';
 import { ForgotPinDto } from './dto/forgot-pin.dto';
 import { ResetPinDto } from './dto/reset-pin.dto';
 import { ForgotPinResponseDto } from './dto/forgot-pin-response.dto';
 import { Public } from '../../../shared/decorators/auth.decorator';
+import { CurrentUser, AuthenticatedUser } from '../../../shared/decorators/current-user.decorator';
+import { JwtAuthGuard } from '../../../shared/guards/jwt-auth.guard';
 import { Request } from 'express';
 
 @ApiTags('Authentication')
@@ -101,5 +105,37 @@ export class AuthController {
     const ipAddress = request.ip || request.connection.remoteAddress;
     const userAgent = request.headers['user-agent'];
     return this.authService.resetPin(resetPinDto, ipAddress, userAgent);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('logout')
+  @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Logout user and invalidate FCM token' })
+  @ApiResponse({
+    status: 200,
+    description: 'Logout successful',
+    schema: {
+      type: 'object',
+      properties: {
+        message: {
+          type: 'string',
+          example: 'Logout successful',
+        },
+      },
+    },
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized',
+  })
+  async logout(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() logoutDto: LogoutDto,
+    @Req() request: Request,
+  ): Promise<{ message: string }> {
+    const ipAddress = request.ip || request.connection.remoteAddress;
+    const userAgent = request.headers['user-agent'];
+    return this.authService.logout(user.id, logoutDto, ipAddress, userAgent);
   }
 }

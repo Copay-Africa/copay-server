@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Inject, forwardRef } from '@nestjs/common';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { SmsService } from '../../sms/application/sms.service';
 import {
@@ -22,15 +22,45 @@ export interface NotificationContext {
 
 @Injectable()
 export class NotificationService {
+  private notificationGateway: any;
+
   constructor(
     private prismaService: PrismaService,
     private smsService: SmsService,
     private fcmService: FcmService,
   ) {}
 
+  // Lazy injection to avoid circular dependency
+  setNotificationGateway(gateway: any) {
+    this.notificationGateway = gateway;
+  }
+
   async sendReminderNotification(reminder: any, user: any): Promise<void> {
     const { notificationTypes } = reminder;
+    const isOverdue = reminder.type === ReminderType.PAYMENT_OVERDUE;
 
+    // Send urgent real-time notification for overdue reminders
+    if (isOverdue && this.notificationGateway) {
+      try {
+        await this.notificationGateway.sendUrgentReminderNotification(
+          user.id,
+          {
+            id: reminder.id,
+            title: reminder.title,
+            message: `URGENT: ${reminder.title} - Your payment is overdue!`,
+            type: reminder.type,
+            isOverdue: true,
+          },
+        );
+      } catch (error) {
+        console.error(
+          `Failed to send urgent WebSocket notification for reminder ${reminder.id}:`,
+          error.message,
+        );
+      }
+    }
+
+    // Send standard notifications based on configured types
     for (const type of notificationTypes) {
       try {
         await this.sendNotification(type as NotificationType, reminder, user, {
@@ -267,7 +297,47 @@ export class NotificationService {
     // In-app notifications are stored in database and retrieved by frontend
     console.log(`In-app notification created for user ${notification.userId}`);
 
-    // Mark as sent immediately since it's stored in database
+    // Send real-time notification via WebSocket if gateway is available
+    if (this.notificationGateway) {
+      try {
+        const wasDelivered = await this.notificationGateway.sendNotificationToUser(
+          notification.userId,
+          {
+            id: notification.id,
+            type: notification.type,
+            title: notification.title,
+            message: notification.message,
+            data: {
+              notificationId: notification.id,
+              reminderId: notification.reminderId,
+              paymentId: notification.paymentId,
+              cooperativeId: notification.cooperativeId,
+              metadata: notification.metadata,
+            },
+          },
+        );
+
+        // If delivered via WebSocket, mark as delivered immediately
+        if (wasDelivered) {
+          await this.prismaService.notification.update({
+            where: { id: notification.id },
+            data: {
+              sentAt: new Date(),
+              status: NotificationStatus.DELIVERED,
+              deliveredAt: new Date(),
+            },
+          });
+          return;
+        }
+      } catch (error) {
+        console.error(
+          `Failed to send real-time notification for ${notification.id}:`,
+          error.message,
+        );
+      }
+    }
+
+    // Mark as sent (stored in database for later retrieval)
     await this.prismaService.notification.update({
       where: { id: notification.id },
       data: {

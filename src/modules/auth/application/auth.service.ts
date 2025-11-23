@@ -11,6 +11,7 @@ import { PrismaService } from '../../../prisma/prisma.service';
 import * as bcrypt from 'bcryptjs';
 import * as crypto from 'crypto';
 import { LoginDto } from '../presentation/dto/login.dto';
+import { LogoutDto } from '../presentation/dto/logout.dto';
 import { AuthResponseDto } from '../presentation/dto/auth-response.dto';
 import { ForgotPinDto } from '../presentation/dto/forgot-pin.dto';
 import { ResetPinDto } from '../presentation/dto/reset-pin.dto';
@@ -346,6 +347,55 @@ export class AuthService {
     return {
       message: 'PIN reset successfully',
     };
+  }
+
+  async logout(
+    userId: string,
+    logoutDto: LogoutDto,
+    ipAddress?: string,
+    userAgent?: string,
+  ): Promise<{ message: string }> {
+    try {
+      // Find user to get current info
+      const user = await this.prismaService.user.findUnique({
+        where: { id: userId },
+        select: {
+          id: true,
+          phone: true,
+          cooperativeId: true,
+          fcmToken: true,
+        },
+      });
+
+      if (!user) {
+        throw new UnauthorizedException('User not found');
+      }
+
+      // No need to update user data for logout since FCM token should remain
+
+      // Log logout activity
+      await this.activityService.logLogout({
+        userId: user.id,
+        cooperativeId: user.cooperativeId || undefined,
+        ipAddress,
+        userAgent,
+      });
+
+      console.log(`👋 User ${user.phone} logged out successfully`);
+
+      return {
+        message: 'Logout successful',
+      };
+    } catch (error) {
+      // Re-throw known exceptions
+      if (error instanceof UnauthorizedException) {
+        throw error;
+      }
+
+      // Log unknown errors
+      console.error('Logout error:', error.message);
+      throw new UnauthorizedException('Logout failed');
+    }
   }
 
   private maskPhoneNumber(phone: string): string {
