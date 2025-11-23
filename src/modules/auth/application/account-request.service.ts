@@ -58,6 +58,21 @@ export class AccountRequestService {
       );
     }
 
+    // Check if there's already any account request linked to an existing user with this phone
+    // This prevents the userId unique constraint violation
+    const existingUserRequest = await this.prismaService.accountRequest.findFirst({
+      where: {
+        phone,
+        userId: { not: null }, // Has been approved and linked to a user
+      },
+    });
+
+    if (existingUserRequest) {
+      throw new ConflictException(
+        'An account request for this phone number has already been processed',
+      );
+    }
+
     // Check if there's already a pending request for this phone and cooperative
     const existingRequest = await this.prismaService.accountRequest.findUnique({
       where: {
@@ -120,43 +135,63 @@ export class AccountRequestService {
     }
 
     // Create the account request
-    const accountRequest = await this.prismaService.accountRequest.create({
-      data: {
-        fullName,
-        phone,
-        cooperativeId,
-        roomNumber,
-        status: AccountRequestStatus.PENDING,
-      },
-      include: {
-        cooperative: {
-          select: {
-            id: true,
-            name: true,
-            code: true,
+    try {
+      const accountRequest = await this.prismaService.accountRequest.create({
+        data: {
+          fullName,
+          phone,
+          cooperativeId,
+          roomNumber,
+          status: AccountRequestStatus.PENDING,
+        },
+        include: {
+          cooperative: {
+            select: {
+              id: true,
+              name: true,
+              code: true,
+            },
           },
         },
-      },
-    });
+      });
 
-    this.logger.log(
-      `Account request created: ${accountRequest.id} for ${phone} at ${cooperative.name}`,
-    );
+      this.logger.log(
+        `Account request created: ${accountRequest.id} for ${phone} at ${cooperative.name}`,
+      );
 
-    // Send SMS confirmation to the user
-    try {
-      await this.smsService.sendSms(
-        phone,
-        `Hello ${fullName}, your account request for ${cooperative.name} has been submitted. You will be notified once it's reviewed. Thank you!`,
-      );
-      this.logger.log(`SMS confirmation sent to ${phone}`);
-    } catch (error) {
-      this.logger.warn(
-        `Failed to send SMS confirmation to ${phone}: ${error instanceof Error ? error.message : 'Unknown error'}`,
-      );
+      // Send SMS confirmation to the user
+      try {
+        await this.smsService.sendSms(
+          phone,
+          `Hello ${fullName}, your account request for ${cooperative.name} has been submitted. You will be notified once it's reviewed. Thank you!`,
+        );
+        this.logger.log(`SMS confirmation sent to ${phone}`);
+      } catch (error) {
+        this.logger.warn(
+          `Failed to send SMS confirmation to ${phone}: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        );
+      }
+
+      return this.mapToResponseDto(accountRequest);
+    } catch (error: any) {
+      if (error?.code === 'P2002') {
+        const constraint = error?.meta?.target;
+        if (constraint?.includes('userId')) {
+          throw new ConflictException(
+            'An account request for this user has already been processed',
+          );
+        } else if (constraint?.includes('phone_cooperativeId')) {
+          throw new ConflictException(
+            'You already have an account request for this cooperative',
+          );
+        } else {
+          throw new ConflictException(
+            'This account request conflicts with an existing record',
+          );
+        }
+      }
+      throw error;
     }
-
-    return this.mapToResponseDto(accountRequest);
   }
 
   /**
