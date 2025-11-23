@@ -6,6 +6,7 @@
 2. [Getting Started](#getting-started)
 3. [Authentication](#authentication)
 4. [API Endpoints](#api-endpoints)
+   - [Health Check Endpoints](#health-check-endpoints)
    - [Authentication Endpoints](#authentication-endpoints)
    - [User Management](#user-management)
    - [Account Requests](#account-requests)
@@ -174,6 +175,104 @@ Some endpoints are public and don't require authentication:
   "jwtSecret": "configured",
   "firebaseProjectId": "copay-2be06",
   "firebaseServiceAccount": "configured"
+}
+```
+
+#### Detailed Health Check
+
+**GET** `/health/detailed` 🌍 *Public*
+
+**Description:** Comprehensive health status including performance metrics and cache statistics.
+
+**Response:**
+
+```json
+{
+  "status": "healthy",
+  "timestamp": "2025-11-23T10:30:00.000Z",
+  "metrics": {
+    "memory": {
+      "heapUsed": 45.2,
+      "heapTotal": 67.8,
+      "external": 2.1
+    },
+    "cpu": {
+      "usage": 15.3,
+      "loadAverage": [0.8, 0.6, 0.5]
+    },
+    "requests": {
+      "total": 1250,
+      "averageResponseTime": 89
+    }
+  },
+  "cache": {
+    "hits": 890,
+    "misses": 110,
+    "hitRate": 89.0,
+    "size": 156
+  },
+  "database": {
+    "connected": true
+  }
+}
+```
+
+#### Performance Metrics
+
+**GET** `/health/performance` 🌍 *Public*
+
+**Description:** Performance metrics only (memory, CPU, request statistics).
+
+**Response:**
+
+```json
+{
+  "memory": {
+    "heapUsed": 45.2,
+    "heapTotal": 67.8,
+    "external": 2.1,
+    "unit": "MB"
+  },
+  "cpu": {
+    "usage": 15.3,
+    "loadAverage": [0.8, 0.6, 0.5]
+  },
+  "requests": {
+    "total": 1250,
+    "averageResponseTime": 89,
+    "unit": "ms"
+  },
+  "uptime": 86400,
+  "timestamp": "2025-11-23T10:30:00.000Z"
+}
+```
+
+#### Cache Statistics
+
+**GET** `/health/cache` 🌍 *Public*
+
+**Description:** Cache performance statistics including hit rate and size.
+
+**Response:**
+
+```json
+{
+  "hits": 890,
+  "misses": 110,
+  "hitRate": 89.0,
+  "size": 156,
+  "tags": {
+    "user": 45,
+    "payment": 67,
+    "cooperative": 23,
+    "room": 21
+  },
+  "performance": {
+    "averageGetTime": 2.3,
+    "averageSetTime": 1.8,
+    "unit": "ms"
+  },
+  "timestamp": "2025-11-23T10:30:00.000Z"
 }
 ```
 
