@@ -62,30 +62,7 @@ export class AccountRequestService {
       );
     }
 
-    // Check if there's already any account request linked to an existing user with this phone
-    // This prevents the userId unique constraint violation
-    const existingUserRequest = await this.prismaService.accountRequest.findFirst({
-      where: {
-        phone,
-        userId: { not: null }, // Has been approved and linked to a user
-      },
-      include: {
-        cooperative: { select: { name: true } },
-        user: { select: { id: true, firstName: true, lastName: true } },
-      },
-    });
-
-    if (existingUserRequest) {
-      const cooperativeName = existingUserRequest.cooperative?.name || 'a cooperative';
-      this.logger.warn(
-        `Blocked duplicate request - Phone: ${phone} already has approved account in ${cooperativeName}, Request ID: ${existingUserRequest.id}, User ID: ${existingUserRequest.userId}`,
-      );
-      throw new ConflictException(
-        `This phone number already has an approved account with ${cooperativeName}. Each phone number can only have one active account.`,
-      );
-    }
-
-    // Additional check: Look for any existing account request with userId set (debugging)
+    // Debug: Check what account requests exist for this phone
     const allExistingRequests = await this.prismaService.accountRequest.findMany({
       where: { phone },
       select: {
@@ -102,6 +79,21 @@ export class AccountRequestService {
       this.logger.debug(
         `Existing account requests for ${phone}: ${JSON.stringify(allExistingRequests)}`,
       );
+      
+      // Only block if there's an approved request with a userId
+      const approvedRequestWithUser = allExistingRequests.find(
+        req => req.status === AccountRequestStatus.APPROVED && req.userId
+      );
+      
+      if (approvedRequestWithUser) {
+        const cooperativeName = approvedRequestWithUser.cooperative?.name || 'a cooperative';
+        this.logger.warn(
+          `Blocked duplicate request - Phone: ${phone} already has approved account in ${cooperativeName}, Request ID: ${approvedRequestWithUser.id}, User ID: ${approvedRequestWithUser.userId}`,
+        );
+        throw new ConflictException(
+          `This phone number already has an approved account with ${cooperativeName}. Each phone number can only have one active account.`,
+        );
+      }
     }
 
     // Check if there's already a pending request for this phone and cooperative
@@ -167,6 +159,16 @@ export class AccountRequestService {
 
     // Create the account request
     try {
+      this.logger.log(
+        `About to create account request with data: ${JSON.stringify({
+          fullName,
+          phone,
+          cooperativeId,
+          roomNumber,
+          status: AccountRequestStatus.PENDING
+        })}`,
+      );
+      
       const accountRequest = await this.prismaService.accountRequest.create({
         data: {
           fullName,
@@ -174,6 +176,7 @@ export class AccountRequestService {
           cooperativeId,
           roomNumber,
           status: AccountRequestStatus.PENDING,
+          // Explicitly NOT setting userId - it should remain null until approval
         },
         include: {
           cooperative: {
@@ -217,8 +220,9 @@ export class AccountRequestService {
         );
         
         if (constraint?.includes('userId')) {
+          // Instead of our custom message, let's provide debugging info
           throw new ConflictException(
-            'An account request for this user has already been processed',
+            `Database constraint error: A record with this user reference already exists. Please contact support if this persists. (Phone: ${phone})`,
           );
         } else if (constraint?.includes('phone_cooperativeId')) {
           throw new ConflictException(
@@ -226,10 +230,12 @@ export class AccountRequestService {
           );
         } else {
           throw new ConflictException(
-            'This account request conflicts with an existing record',
+            `Database constraint error: ${constraint}. Phone: ${phone}, Cooperative: ${cooperativeId}`,
           );
         }
       }
+      
+      // If it's not a constraint error, throw the original error
       throw error;
     }
   }
