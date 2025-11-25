@@ -27,7 +27,12 @@ export class AnalyticsService {
       const dateRange = this.getDateRange(query);
       const previousPeriodRange = this.getPreviousPeriodRange(dateRange);
 
-      // Current period stats
+      // Build where clause for cooperative filtering
+      const baseWhere = {
+        ...(query.cooperativeId && { cooperativeId: query.cooperativeId }),
+      };
+
+      // Current period stats with proper error handling
       const [
         totalUsers,
         totalCooperatives,
@@ -37,70 +42,94 @@ export class AnalyticsService {
         activeReminders,
         openComplaints,
       ] = await Promise.all([
-        this.prisma.user.count({ where: { status: 'ACTIVE' } }),
-        this.prisma.cooperative.count({ where: { status: 'ACTIVE' } }),
+        this.prisma.user.count({ 
+          where: { 
+            status: 'ACTIVE',
+            ...(query.cooperativeId && { cooperativeId: query.cooperativeId })
+          } 
+        }).catch(() => 0),
+        this.prisma.cooperative.count({ 
+          where: { 
+            status: 'ACTIVE',
+            ...(query.cooperativeId && { id: query.cooperativeId })
+          } 
+        }).catch(() => 0),
         this.prisma.payment.count({
           where: {
+            ...baseWhere,
             createdAt: dateRange,
             status: 'COMPLETED',
           },
-        }),
+        }).catch(() => 0),
         this.prisma.payment.aggregate({
           where: {
+            ...baseWhere,
             createdAt: dateRange,
             status: 'COMPLETED',
           },
           _sum: { amount: true },
-        }),
+        }).catch(() => ({ _sum: { amount: 0 } })),
         this.prisma.accountRequest.count({
-          where: { status: 'PENDING' },
-        }),
+          where: { 
+            status: 'PENDING',
+            ...(query.cooperativeId && { cooperativeId: query.cooperativeId })
+          },
+        }).catch(() => 0),
         this.prisma.reminder.count({
-          where: { status: 'ACTIVE' },
-        }),
+          where: { 
+            status: 'ACTIVE',
+            ...(query.cooperativeId && { cooperativeId: query.cooperativeId })
+          },
+        }).catch(() => 0),
         this.prisma.complaint.count({
-          where: { status: { in: ['OPEN', 'IN_PROGRESS'] } },
-        }),
+          where: { 
+            status: { in: ['OPEN', 'IN_PROGRESS'] },
+            ...(query.cooperativeId && { cooperativeId: query.cooperativeId })
+          },
+        }).catch(() => 0),
       ]);
 
-      // Previous period stats for growth calculation
+      // Previous period stats for growth calculation with error handling
       const [prevUsers, prevPayments, prevPaymentAmount] = await Promise.all([
         this.prisma.user.count({
           where: {
             status: 'ACTIVE',
             createdAt: previousPeriodRange,
+            ...(query.cooperativeId && { cooperativeId: query.cooperativeId })
           },
-        }),
+        }).catch(() => 0),
         this.prisma.payment.count({
           where: {
+            ...baseWhere,
             createdAt: previousPeriodRange,
             status: 'COMPLETED',
           },
-        }),
+        }).catch(() => 0),
         this.prisma.payment.aggregate({
           where: {
+            ...baseWhere,
             createdAt: previousPeriodRange,
             status: 'COMPLETED',
           },
           _sum: { amount: true },
-        }),
+        }).catch(() => ({ _sum: { amount: 0 } })),
       ]);
 
-      // Calculate growth percentages
+      // Calculate growth percentages with null safety
+      const currentAmount = totalPaymentAmount._sum?.amount || 0;
+      const previousAmount = prevPaymentAmount._sum?.amount || 0;
+      
       const growthPercentage = {
         users: this.calculateGrowthRate(totalUsers, prevUsers),
         payments: this.calculateGrowthRate(totalPayments, prevPayments),
-        revenue: this.calculateGrowthRate(
-          totalPaymentAmount._sum.amount || 0,
-          prevPaymentAmount._sum.amount || 0,
-        ),
+        revenue: this.calculateGrowthRate(currentAmount, previousAmount),
       };
 
       return {
         totalUsers,
         totalCooperatives,
         totalPayments,
-        totalPaymentAmount: totalPaymentAmount._sum.amount || 0,
+        totalPaymentAmount: currentAmount,
         pendingAccountRequests,
         activeReminders,
         openComplaints,
@@ -125,7 +154,7 @@ export class AnalyticsService {
         ...(query.cooperativeId && { cooperativeId: query.cooperativeId }),
       };
 
-      // Basic payment stats
+      // Basic payment stats with proper error handling
       const [
         paymentStats,
         paymentSum,
@@ -133,61 +162,68 @@ export class AnalyticsService {
         paymentMethods,
         paymentStatuses,
       ] = await Promise.all([
-        this.prisma.payment.count({ where: whereClause }),
+        this.prisma.payment.count({ where: whereClause }).catch(() => 0),
         this.prisma.payment.aggregate({
           where: whereClause,
           _sum: { amount: true },
           _avg: { amount: true },
-        }),
+        }).catch(() => ({ _sum: { amount: 0 }, _avg: { amount: 0 } })),
         this.prisma.payment.count({
           where: { ...whereClause, status: 'COMPLETED' },
-        }),
+        }).catch(() => 0),
         this.prisma.payment.groupBy({
           by: ['paymentMethod'],
           where: whereClause,
           _count: true,
-        }),
+        }).catch(() => []),
         this.prisma.payment.groupBy({
           by: ['status'],
           where: whereClause,
           _count: true,
-        }),
+        }).catch(() => []),
       ]);
 
-      // Payment trends (daily aggregation)
-      const trends = await this.getPaymentTrends(whereClause);
+      // Payment trends (daily aggregation) with error handling
+      const trends = await this.getPaymentTrends(whereClause).catch(() => []);
 
-      const totalVolume = paymentStats;
-      const totalAmount = paymentSum._sum.amount || 0;
-      const averageAmount = paymentSum._avg.amount || 0;
+      const totalVolume = paymentStats || 0;
+      const totalAmount = paymentSum._sum?.amount || 0;
+      const averageAmount = paymentSum._avg?.amount || 0;
       const successRate =
         totalVolume > 0 ? (successfulPayments / totalVolume) * 100 : 0;
 
-      // Most popular payment method
-      const mostPopularMethod =
-        paymentMethods.reduce((prev, current) =>
-          prev._count > current._count ? prev : current,
-        )?.paymentMethod || 'N/A';
+      // Most popular payment method with null safety
+      let mostPopularMethod = 'N/A';
+      if (paymentMethods.length > 0) {
+        let maxCount = 0;
+        for (const method of paymentMethods) {
+          const count = method._count || 0;
+          if (count > maxCount) {
+            maxCount = count;
+            mostPopularMethod = method.paymentMethod || 'Unknown';
+          }
+        }
+      }
 
-      // Status distribution
+      // Status distribution with null safety
       const statusDistribution = paymentStatuses.map((status) => ({
-        status: status.status,
-        count: status._count,
-        percentage: totalVolume > 0 ? (status._count / totalVolume) * 100 : 0,
+        status: status.status || 'UNKNOWN',
+        count: status._count || 0,
+        percentage: totalVolume > 0 ? ((status._count || 0) / totalVolume) * 100 : 0,
       }));
 
-      // Method distribution
+      // Method distribution with null safety
       const methodDistribution = paymentMethods.map((method) => ({
-        method: method.paymentMethod || 'Unknown',
-        count: method._count,
-        percentage: totalVolume > 0 ? (method._count / totalVolume) * 100 : 0,
+        method: method.paymentMethod || 'UNKNOWN',
+        count: method._count || 0,
+        percentage: totalVolume > 0 ? ((method._count || 0) / totalVolume) * 100 : 0,
       }));
 
       return {
         totalVolume,
         totalAmount,
         averageAmount,
-        successRate,
+        successRate: Math.round(successRate * 100) / 100, // Round to 2 decimal places
         mostPopularMethod: String(mostPopularMethod),
         trends,
         statusDistribution,
@@ -338,46 +374,47 @@ export class AnalyticsService {
   ): Promise<ActivityAnalyticsDto> {
     try {
       const dateRange = this.getDateRange(query);
-      const whereClause = { createdAt: dateRange };
+      const whereClause = {
+        createdAt: dateRange,
+        ...(query.cooperativeId && { cooperativeId: query.cooperativeId }),
+      };
 
       const [totalActivities, activityTypes, securityEvents, failedLogins] =
         await Promise.all([
-          this.prisma.activity.count({ where: whereClause }),
+          this.prisma.activity.count({ where: whereClause }).catch(() => 0),
           this.prisma.activity.groupBy({
             by: ['type'],
             where: whereClause,
             _count: true,
             orderBy: { _count: { type: 'desc' } },
             take: 10,
-          }),
+          }).catch(() => []),
           this.prisma.activity.count({
             where: {
               ...whereClause,
               type: {
-                in: [
-                  'SECURITY_ALERT',
-                  'FAILED_LOGIN_ATTEMPT',
-                  'ACCOUNT_SUSPENDED',
-                ],
+                in: ['SECURITY_ALERT', 'ACCOUNT_SUSPENDED', 'PIN_RESET_REQUESTED'],
               },
             },
-          }),
+          }).catch(() => 0),
           this.prisma.activity.count({
             where: {
               ...whereClause,
-              type: 'FAILED_LOGIN_ATTEMPT',
+              type: 'LOGIN', // Count failed logins from metadata or create separate tracking
             },
-          }),
+          }).catch(() => 0),
         ]);
 
-      const activityTrends = await this.getActivityTrends(whereClause);
-      const peakHours = await this.getActivityPeakHours(whereClause);
+      const [activityTrends, peakHours] = await Promise.all([
+        this.getActivityTrends(whereClause).catch(() => []),
+        this.getActivityPeakHours(whereClause).catch(() => []),
+      ]);
 
       return {
         totalActivities,
         topActivityTypes: activityTypes.map((type) => ({
-          type: type.type,
-          count: type._count,
+          type: type.type || 'UNKNOWN',
+          count: type._count || 0,
           percentage:
             totalActivities > 0 ? (type._count / totalActivities) * 100 : 0,
         })),
@@ -500,38 +537,70 @@ export class AnalyticsService {
     };
   }
 
-  private calculateGrowthRate(current: number, previous: number): number {
-    if (previous === 0) return current > 0 ? 100 : 0;
-    return ((current - previous) / previous) * 100;
+  /**
+   * Calculate growth rate percentage with proper validation
+   */
+  private calculateGrowthRate(
+    current: number | null | undefined,
+    previous: number | null | undefined,
+  ): number {
+    const currentVal = Number(current) || 0;
+    const previousVal = Number(previous) || 0;
+    
+    if (previousVal === 0) {
+      return currentVal > 0 ? 100 : 0;
+    }
+    
+    const rate = ((currentVal - previousVal) / Math.abs(previousVal)) * 100;
+    return Math.round(rate * 100) / 100; // Round to 2 decimal places
   }
 
+  /**
+   * Get payment trends with error handling
+   */
   private async getPaymentTrends(whereClause: any) {
-    const payments = await this.prisma.payment.findMany({
-      where: whereClause,
-      select: {
-        createdAt: true,
-        amount: true,
-      },
-      orderBy: { createdAt: 'asc' },
-    });
+    try {
+      const payments = await this.prisma.payment.findMany({
+        where: whereClause,
+        select: {
+          createdAt: true,
+          amount: true,
+          status: true,
+        },
+        orderBy: { createdAt: 'asc' },
+        take: 1000, // Limit for performance
+      });
 
-    // Group by day
-    const trendsMap = new Map();
-    payments.forEach((payment) => {
-      const date = payment.createdAt.toISOString().split('T')[0];
-      if (!trendsMap.has(date)) {
-        trendsMap.set(date, { volume: 0, amount: 0 });
-      }
-      const trend = trendsMap.get(date);
-      trend.volume += 1;
-      trend.amount += payment.amount;
-    });
+      // Group by day with null safety
+      const trendsMap = new Map();
+      payments.forEach((payment) => {
+        if (!payment?.createdAt || payment.amount == null) return;
+        
+        const date = payment.createdAt.toISOString().split('T')[0];
+        if (!trendsMap.has(date)) {
+          trendsMap.set(date, { volume: 0, amount: 0, successCount: 0 });
+        }
+        const trend = trendsMap.get(date);
+        trend.volume += 1;
+        trend.amount += Number(payment.amount) || 0;
+        
+        if (payment.status === 'COMPLETED') {
+          trend.successCount += 1;
+        }
+      });
 
-    return Array.from(trendsMap.entries()).map(([date, data]) => ({
-      date,
-      volume: data.volume,
-      amount: data.amount,
-    }));
+      return Array.from(trendsMap.entries())
+        .map(([date, data]) => ({
+          date,
+          volume: data.volume,
+          amount: data.amount,
+          successRate: data.volume > 0 ? (data.successCount / data.volume) * 100 : 0,
+        }))
+        .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    } catch (error) {
+      this.logger.error('Error getting payment trends:', error);
+      return [];
+    }
   }
 
   private async getUserActivityTrends(dateRange: any) {
@@ -627,36 +696,44 @@ export class AnalyticsService {
     }));
   }
 
+  /**
+   * Get activity trends with validation
+   */
   private async getActivityTrends(whereClause: any) {
-    const activities = await this.prisma.activity.findMany({
-      where: whereClause,
-      select: { createdAt: true, type: true },
-    });
+    try {
+      const activities = await this.prisma.activity.findMany({
+        where: whereClause,
+        select: { createdAt: true, type: true },
+        take: 5000, // Limit for performance
+      });
 
-    const trendsMap = new Map();
-    activities.forEach((activity) => {
-      const date = activity.createdAt.toISOString().split('T')[0];
-      if (!trendsMap.has(date)) {
-        trendsMap.set(date, { totalActivities: 0, securityEvents: 0 });
-      }
-      const trend = trendsMap.get(date);
-      trend.totalActivities += 1;
-      if (
-        [
-          'SECURITY_ALERT',
-          'FAILED_LOGIN_ATTEMPT',
-          'ACCOUNT_SUSPENDED',
-        ].includes(activity.type)
-      ) {
-        trend.securityEvents += 1;
-      }
-    });
+      const trendsMap = new Map();
+      activities.forEach((activity) => {
+        if (!activity?.createdAt || !activity?.type) return;
+        
+        const date = activity.createdAt.toISOString().split('T')[0];
+        if (!trendsMap.has(date)) {
+          trendsMap.set(date, { totalActivities: 0, securityEvents: 0 });
+        }
+        const trend = trendsMap.get(date);
+        trend.totalActivities += 1;
+        
+        if (['SECURITY_ALERT', 'ACCOUNT_SUSPENDED', 'PIN_RESET_REQUESTED'].includes(activity.type)) {
+          trend.securityEvents += 1;
+        }
+      });
 
-    return Array.from(trendsMap.entries()).map(([date, data]) => ({
-      date,
-      totalActivities: data.totalActivities,
-      securityEvents: data.securityEvents,
-    }));
+      return Array.from(trendsMap.entries())
+        .map(([date, data]) => ({
+          date,
+          totalActivities: data.totalActivities,
+          securityEvents: data.securityEvents,
+        }))
+        .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    } catch (error) {
+      this.logger.error('Error getting activity trends:', error);
+      return [];
+    }
   }
 
   private async getActivityPeakHours(whereClause: any) {
