@@ -20,6 +20,7 @@ import { ComplaintModule } from './modules/complaint/complaint.module';
 import { NotificationModule } from './modules/notification/notification.module';
 import { AnnouncementModule } from './modules/announcement/announcement.module';
 import { CooperativeCategoryModule } from './modules/cooperative-category/cooperative-category.module';
+import { AnalyticsModule } from './modules/analytics/analytics.module';
 import { JwtAuthGuard } from './shared/guards/jwt-auth.guard';
 import { EnhancedCacheService } from './shared/services/enhanced-cache.service';
 import { PerformanceMonitoringService } from './shared/services/performance-monitoring.service';
@@ -101,6 +102,7 @@ import { validateConfig } from './config/config.validation';
     ComplaintModule,
     NotificationModule,
     AnnouncementModule,
+    AnalyticsModule,
   ],
   controllers: [AppController, HealthController],
   providers: [

@@ -20,6 +20,7 @@
    - [Complaints](#complaints)
    - [Notifications](#notifications)
    - [Announcements](#announcements)
+   - [Analytics](#analytics)
    - [Webhooks](#webhooks)
 5. [Data Models](#data-models)
 6. [Security](#security)
@@ -2921,6 +2922,385 @@ The Announcements API enables role-based announcement creation and delivery with
   "notificationTypes": ["IN_APP"]
 }
 ```
+
+---
+
+### Analytics
+
+The Analytics API provides comprehensive business intelligence and reporting capabilities for the CoPay platform. It offers insights into dashboard statistics, payment trends, user behavior, cooperative performance, activity monitoring, and revenue analytics.
+
+#### Dashboard Statistics
+
+**GET** `/analytics/dashboard` 🔒 *Admin only*
+
+Get comprehensive dashboard statistics including total counts and growth metrics.
+
+**Query Parameters:**
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `period` | `TimePeriod` | `MONTH` | Time period for growth calculation |
+
+**Response:**
+
+```json
+{
+  "totalUsers": 1250,
+  "totalCooperatives": 45,
+  "totalPayments": 8340,
+  "totalRevenue": 125000000,
+  "activeUsers": 892,
+  "pendingComplaints": 12,
+  "growth": {
+    "users": 15.2,
+    "cooperatives": 8.7,
+    "payments": 23.1,
+    "revenue": 18.5
+  }
+}
+```
+
+#### Payment Analytics
+
+**GET** `/analytics/payments` 🔒 *Admin only*
+
+Get detailed payment analytics with trends and breakdowns.
+
+**Query Parameters:**
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `period` | `TimePeriod` | `MONTH` | Analysis time period |
+| `startDate` | `Date` | - | Start date for analysis |
+| `endDate` | `Date` | - | End date for analysis |
+
+**Response:**
+
+```json
+{
+  "totalTransactions": 8340,
+  "totalAmount": 125000000,
+  "averageAmount": 14988,
+  "successRate": 94.2,
+  "paymentMethodBreakdown": {
+    "MOBILE_MONEY": {
+      "count": 6672,
+      "percentage": 80.0,
+      "totalAmount": 95000000
+    },
+    "CARD": {
+      "count": 1668,
+      "percentage": 20.0,
+      "totalAmount": 30000000
+    }
+  },
+  "trends": [
+    {
+      "date": "2024-01-01",
+      "count": 285,
+      "amount": 4250000
+    }
+  ],
+  "growth": {
+    "transactions": 23.1,
+    "amount": 18.5
+  }
+}
+```
+
+#### User Analytics
+
+**GET** `/analytics/users` 🔒 *Admin only*
+
+Get comprehensive user behavior analytics.
+
+**Query Parameters:**
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `period` | `TimePeriod` | `MONTH` | Analysis time period |
+| `cooperativeId` | `string` | - | Filter by cooperative |
+
+**Response:**
+
+```json
+{
+  "totalUsers": 1250,
+  "activeUsers": 892,
+  "newUsers": 156,
+  "usersByRole": {
+    "TENANT": {
+      "count": 1050,
+      "percentage": 84.0
+    },
+    "COOPERATIVE_ADMIN": {
+      "count": 180,
+      "percentage": 14.4
+    },
+    "ORGANIZATION_ADMIN": {
+      "count": 20,
+      "percentage": 1.6
+    }
+  },
+  "registrationTrends": [
+    {
+      "date": "2024-01-01",
+      "count": 12
+    }
+  ],
+  "engagementMetrics": {
+    "averageSessionsPerUser": 4.2,
+    "averagePaymentsPerUser": 6.7
+  },
+  "growth": {
+    "total": 15.2,
+    "active": 12.8
+  }
+}
+```
+
+#### Cooperative Analytics
+
+**GET** `/analytics/cooperatives` 🔒 *Admin only*
+
+Get detailed cooperative performance analytics.
+
+**Query Parameters:**
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `period` | `TimePeriod` | `MONTH` | Analysis time period |
+| `categoryId` | `string` | - | Filter by category |
+
+**Response:**
+
+```json
+{
+  "totalCooperatives": 45,
+  "activeCooperatives": 38,
+  "cooperativesByCategory": {
+    "residential": {
+      "count": 25,
+      "percentage": 55.6
+    },
+    "commercial": {
+      "count": 20,
+      "percentage": 44.4
+    }
+  },
+  "performanceMetrics": {
+    "averageMembersPerCooperative": 27.8,
+    "averageRevenuePerCooperative": 2777778,
+    "averagePaymentsPerCooperative": 185.3
+  },
+  "topPerformers": [
+    {
+      "id": "507f1f77bcf86cd799439011",
+      "name": "Sunrise Apartments",
+      "memberCount": 45,
+      "totalRevenue": 8500000,
+      "paymentCount": 320
+    }
+  ],
+  "growth": {
+    "total": 8.7,
+    "active": 6.4
+  }
+}
+```
+
+#### Activity Analytics
+
+**GET** `/analytics/activities` 🔒 *Admin only*
+
+Get comprehensive activity and engagement analytics.
+
+**Query Parameters:**
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `period` | `TimePeriod` | `MONTH` | Analysis time period |
+| `activityType` | `ActivityType` | - | Filter by activity type |
+
+**Response:**
+
+```json
+{
+  "totalActivities": 15420,
+  "activitiesByType": {
+    "USER_REGISTRATION": {
+      "count": 3240,
+      "percentage": 21.0
+    },
+    "PAYMENT_MADE": {
+      "count": 8340,
+      "percentage": 54.1
+    },
+    "COOPERATIVE_JOINED": {
+      "count": 1890,
+      "percentage": 12.3
+    },
+    "COMPLAINT_SUBMITTED": {
+      "count": 1950,
+      "percentage": 12.6
+    }
+  },
+  "dailyActivityTrends": [
+    {
+      "date": "2024-01-01",
+      "count": 45
+    }
+  ],
+  "peakHours": [
+    {
+      "hour": 9,
+      "count": 1240
+    },
+    {
+      "hour": 18,
+      "count": 1120
+    }
+  ],
+  "growth": 28.3
+}
+```
+
+#### Revenue Analytics
+
+**GET** `/analytics/revenue` 🔒 *Admin only*
+
+Get detailed revenue analytics with forecasting and trends.
+
+**Query Parameters:**
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `period` | `TimePeriod` | `MONTH` | Analysis time period |
+| `cooperativeId` | `string` | - | Filter by cooperative |
+
+**Response:**
+
+```json
+{
+  "totalRevenue": 125000000,
+  "averageRevenuePerTransaction": 14988,
+  "revenueByCooperative": [
+    {
+      "cooperativeId": "507f1f77bcf86cd799439011",
+      "cooperativeName": "Sunrise Apartments",
+      "revenue": 8500000,
+      "percentage": 6.8
+    }
+  ],
+  "revenueByPaymentType": {
+    "RENT": {
+      "amount": 75000000,
+      "percentage": 60.0
+    },
+    "UTILITIES": {
+      "amount": 30000000,
+      "percentage": 24.0
+    },
+    "MAINTENANCE": {
+      "amount": 20000000,
+      "percentage": 16.0
+    }
+  },
+  "monthlyTrends": [
+    {
+      "month": "2024-01",
+      "revenue": 10500000,
+      "transactionCount": 720
+    }
+  ],
+  "projections": {
+    "nextMonth": 13500000,
+    "nextQuarter": 38500000
+  },
+  "growth": 18.5
+}
+```
+
+#### Analytics Summary
+
+**GET** `/analytics/summary` 🔒 *Admin only*
+
+Get a comprehensive summary of all analytics in a single request.
+
+**Query Parameters:**
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `period` | `TimePeriod` | `MONTH` | Analysis time period |
+
+**Response:**
+
+```json
+{
+  "dashboard": {
+    "totalUsers": 1250,
+    "totalCooperatives": 45,
+    "totalRevenue": 125000000
+  },
+  "trends": {
+    "userGrowth": 15.2,
+    "revenueGrowth": 18.5,
+    "cooperativeGrowth": 8.7
+  },
+  "highlights": [
+    {
+      "metric": "Payment Success Rate",
+      "value": "94.2%",
+      "change": "+2.1%"
+    }
+  ],
+  "generatedAt": "2024-01-15T10:30:00Z"
+}
+```
+
+#### Export Analytics Data
+
+**GET** `/analytics/export` 🔒 *Admin only*
+
+Export analytics data in CSV format for external analysis.
+
+**Query Parameters:**
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `type` | `string` | - | Export type: `dashboard`, `payments`, `users`, `cooperatives`, `activities`, `revenue` |
+| `period` | `TimePeriod` | `MONTH` | Analysis time period |
+| `startDate` | `Date` | - | Start date for export |
+| `endDate` | `Date` | - | End date for export |
+
+**Response:**
+- **Content-Type**: `text/csv`
+- **Headers**: `Content-Disposition: attachment; filename="analytics-export.csv"`
+
+**Time Period Options:**
+
+| Period | Description |
+|--------|-------------|
+| `WEEK` | Last 7 days |
+| `MONTH` | Last 30 days |
+| `QUARTER` | Last 90 days |
+| `YEAR` | Last 365 days |
+
+**Role-Based Access:**
+
+- **ORGANIZATION_ADMIN**: Full access to all analytics endpoints
+- **COOPERATIVE_ADMIN**: Limited to their cooperative data (where applicable)
+- **TENANT**: No access to analytics endpoints
+
+**Rate Limiting:**
+
+- Analytics endpoints are rate-limited to 100 requests per hour per user
+- Export endpoint is limited to 10 requests per hour per user
+
+**Caching:**
+
+- Analytics data is cached for 5 minutes to improve performance
+- Real-time data is available through webhooks for critical metrics
 
 ---
 

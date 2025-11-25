@@ -287,7 +287,7 @@ model User {
   transactions             Transaction[]
   complaints               Complaint[]
   processedAccountRequests AccountRequest[] @relation("AccountRequestProcessor")
-  accountRequest           AccountRequest?  @relation("AccountRequestUser")
+  accountRequests          AccountRequest[] @relation("AccountRequestUser")
   activities               Activity[]
   reminders                Reminder[]
   notifications            Notification[]
@@ -664,8 +664,8 @@ model AccountRequest {
   processedUser User?     @relation("AccountRequestProcessor", fields: [processedBy], references: [id])
   processedAt   DateTime?
 
-  // Generated user (if approved)
-  userId String? @unique @db.ObjectId
+  // Generated user (if approved) - now one-to-many relationship
+  userId String? @db.ObjectId
   user   User?   @relation("AccountRequestUser", fields: [userId], references: [id])
 
   // Metadata

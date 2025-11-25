@@ -62,66 +62,6 @@ export class AccountRequestService {
       );
     }
 
-    // Debug: Check what account requests exist for this phone
-    const allExistingRequests = await this.prismaService.accountRequest.findMany({
-      where: { phone },
-      select: {
-        id: true,
-        phone: true,
-        status: true,
-        userId: true,
-        cooperativeId: true,
-        cooperative: { select: { name: true } },
-      },
-    });
-
-    if (allExistingRequests.length > 0) {
-      this.logger.debug(
-        `Existing account requests for ${phone}: ${JSON.stringify(allExistingRequests)}`,
-      );
-      
-      // Only block if there's an approved request with a userId
-      const approvedRequestWithUser = allExistingRequests.find(
-        req => req.status === AccountRequestStatus.APPROVED && req.userId
-      );
-      
-      if (approvedRequestWithUser) {
-        const cooperativeName = approvedRequestWithUser.cooperative?.name || 'a cooperative';
-        this.logger.warn(
-          `Blocked duplicate request - Phone: ${phone} already has approved account in ${cooperativeName}, Request ID: ${approvedRequestWithUser.id}, User ID: ${approvedRequestWithUser.userId}`,
-        );
-        throw new ConflictException(
-          `This phone number already has an approved account with ${cooperativeName}. Each phone number can only have one active account.`,
-        );
-      }
-    }
-
-    // CRITICAL CHECK: Look for any account request with userId set to avoid constraint violation
-    const requestsWithUserId = await this.prismaService.accountRequest.findMany({
-      where: {
-        userId: { not: null },
-      },
-      select: {
-        id: true,
-        phone: true,
-        userId: true,
-        status: true,
-        cooperative: { select: { name: true } },
-      },
-    });
-
-    this.logger.debug(
-      `All account requests with userId set: ${JSON.stringify(requestsWithUserId)}`,
-    );
-
-    // Check if there are any records that might cause constraint issues
-    const conflictingUserIds = requestsWithUserId.map(req => req.userId);
-    if (conflictingUserIds.length > 0) {
-      this.logger.warn(
-        `Found ${conflictingUserIds.length} account requests with userId set. This might cause constraint violations.`,
-      );
-    }
-
     // Check if there's already a pending request for this phone and cooperative
     const existingRequest = await this.prismaService.accountRequest.findUnique({
       where: {
@@ -183,41 +123,19 @@ export class AccountRequestService {
       throw new ConflictException('This room number is already occupied');
     }
 
-    // Create the account request using upsert to avoid constraint issues
+    // Create the account request
     try {
       this.logger.log(
-        `About to create account request with data: ${JSON.stringify({
-          fullName,
-          phone,
-          cooperativeId,
-          roomNumber,
-          status: AccountRequestStatus.PENDING
-        })}`,
+        `Creating account request - Name: ${fullName}, Phone: ${phone}, Cooperative: ${cooperativeId}, Room: ${roomNumber}`,
       );
       
-      // Use a unique identifier for the where clause that won't conflict
-      const uniqueIdentifier = `${phone}_${cooperativeId}_${Date.now()}`;
-      
-      const accountRequest = await this.prismaService.accountRequest.upsert({
-        where: {
-          phone_cooperativeId: {
-            phone,
-            cooperativeId,
-          },
-        },
-        create: {
+      const accountRequest = await this.prismaService.accountRequest.create({
+        data: {
           fullName,
           phone,
           cooperativeId,
           roomNumber,
           status: AccountRequestStatus.PENDING,
-          // Do NOT set userId at all - let Prisma handle it as undefined/null
-        },
-        update: {
-          fullName, // Update the name if request already exists
-          roomNumber, // Update room number
-          status: AccountRequestStatus.PENDING, // Reset to pending
-          updatedAt: new Date(),
         },
         include: {
           cooperative: {
@@ -251,7 +169,6 @@ export class AccountRequestService {
     } catch (error: any) {
       this.logger.error(
         `Failed to create account request for ${phone}: ${error.message}`,
-        error.stack,
       );
       
       if (error?.code === 'P2002') {
@@ -260,28 +177,13 @@ export class AccountRequestService {
           `Unique constraint violation: ${constraint}, Phone: ${phone}, Cooperative: ${cooperativeId}`,
         );
         
-        if (constraint?.includes('userId')) {
-          // Get more debugging info about the constraint violation
-          const allUsersWithRequests = await this.prismaService.accountRequest.findMany({
-            where: { userId: { not: null } },
-            select: { id: true, phone: true, userId: true, status: true },
-          }).catch(() => []);
-          
-          this.logger.error(
-            `DEBUG: All account requests with userId: ${JSON.stringify(allUsersWithRequests)}`,
-          );
-          
-          // Instead of our custom message, let's provide debugging info
-          throw new ConflictException(
-            `Database constraint error: A record with this user reference already exists. Please contact support if this persists. (Phone: ${phone})`,
-          );
-        } else if (constraint?.includes('phone_cooperativeId')) {
+        if (constraint?.includes('phone_cooperativeId')) {
           throw new ConflictException(
             'You already have an account request for this cooperative',
           );
         } else {
           throw new ConflictException(
-            `Database constraint error: ${constraint}. Phone: ${phone}, Cooperative: ${cooperativeId}`,
+            `This account request conflicts with an existing record: ${constraint}`,
           );
         }
       }
@@ -478,6 +380,23 @@ export class AccountRequestService {
           },
         },
       });
+
+      // Check if another account request already has this user linked (application-level uniqueness check)
+      const existingRequestWithUser = await this.prismaService.accountRequest.findFirst({
+        where: {
+          userId: user.id,
+          id: { not: id }, // Exclude current request
+        },
+      });
+
+      if (existingRequestWithUser) {
+        // This shouldn't happen but let's handle it gracefully
+        this.logger.warn(
+          `User ${user.id} is already linked to another account request: ${existingRequestWithUser.id}`,
+        );
+        // We can either throw an error or continue, depending on business logic
+        // For now, we'll continue as the user was already created
+      }
 
       // Update the request
       const updatedRequest = await this.prismaService.accountRequest.update({
