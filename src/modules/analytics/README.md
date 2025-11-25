@@ -9,9 +9,9 @@ The Analytics module provides comprehensive business intelligence and analytics 
 All analytics endpoints require JWT authentication with appropriate role-based access:
 
 - **SUPER_ADMIN**: Access to all analytics across all cooperatives
-- **COOPERATIVE_ADMIN**: Access to analytics filtered to their cooperative
+- **ORGANIZATION_ADMIN**: Access to analytics filtered to their cooperative
 - **TREASURER**: Access to payment and revenue analytics for their cooperative
-- **MEMBER**: Limited access to summary analytics
+- **TENANT**: Limited access to summary analytics
 
 ## Base URL
 
@@ -331,7 +331,7 @@ The analytics API supports the following time periods:
 - Access to cooperative analytics endpoint
 - No filtering restrictions
 
-### Cooperative Admin (`COOPERATIVE_ADMIN`)
+### Organization Admin (`ORGANIZATION_ADMIN`)
 - Access to dashboard, payment, user, activity, and revenue analytics
 - Automatically filtered to their cooperative
 - Cannot access cooperative analytics endpoint
@@ -341,7 +341,7 @@ The analytics API supports the following time periods:
 - Automatically filtered to their cooperative
 - Limited dashboard access
 
-### Member (`MEMBER`)
+### Tenant (`TENANT`)
 - Access to summary analytics only
 - Automatically filtered to their cooperative
 - Read-only access

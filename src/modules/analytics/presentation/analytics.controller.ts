@@ -39,7 +39,7 @@ export class AnalyticsController {
   constructor(private readonly analyticsService: AnalyticsService) {}
 
   @Get('dashboard')
-  @Roles('SUPER_ADMIN', 'COOPERATIVE_ADMIN')
+  @Roles('SUPER_ADMIN', 'ORGANIZATION_ADMIN')
   @ApiOperation({
     summary: 'Get dashboard statistics',
     description:
@@ -82,7 +82,7 @@ export class AnalyticsController {
       this.logger.log(`Getting dashboard stats for user ${user.id}`);
 
       // If user is not SUPER_ADMIN, filter by their cooperative
-      if (user.role === 'COOPERATIVE_ADMIN' && !query.cooperativeId) {
+      if (user.role === 'ORGANIZATION_ADMIN' && !query.cooperativeId) {
         query.cooperativeId = user.cooperativeId;
       }
 
@@ -94,7 +94,7 @@ export class AnalyticsController {
   }
 
   @Get('payments')
-  @Roles('SUPER_ADMIN', 'COOPERATIVE_ADMIN', 'TREASURER')
+  @Roles('SUPER_ADMIN', 'ORGANIZATION_ADMIN', 'TREASURER')
   @ApiOperation({
     summary: 'Get payment analytics',
     description:
@@ -149,7 +149,7 @@ export class AnalyticsController {
   }
 
   @Get('users')
-  @Roles('SUPER_ADMIN', 'COOPERATIVE_ADMIN')
+  @Roles('SUPER_ADMIN', 'ORGANIZATION_ADMIN')
   @ApiOperation({
     summary: 'Get user analytics',
     description:
@@ -192,7 +192,7 @@ export class AnalyticsController {
       this.logger.log(`Getting user analytics for user ${user.id}`);
 
       // If user is not SUPER_ADMIN, filter by their cooperative
-      if (user.role === 'COOPERATIVE_ADMIN' && !query.cooperativeId) {
+      if (user.role === 'ORGANIZATION_ADMIN' && !query.cooperativeId) {
         query.cooperativeId = user.cooperativeId;
       }
 
@@ -247,7 +247,7 @@ export class AnalyticsController {
   }
 
   @Get('activity')
-  @Roles('SUPER_ADMIN', 'COOPERATIVE_ADMIN')
+  @Roles('SUPER_ADMIN', 'ORGANIZATION_ADMIN')
   @ApiOperation({
     summary: 'Get activity analytics',
     description:
@@ -290,7 +290,7 @@ export class AnalyticsController {
       this.logger.log(`Getting activity analytics for user ${user.id}`);
 
       // If user is not SUPER_ADMIN, filter by their cooperative
-      if (user.role === 'COOPERATIVE_ADMIN' && !query.cooperativeId) {
+      if (user.role === 'ORGANIZATION_ADMIN' && !query.cooperativeId) {
         query.cooperativeId = user.cooperativeId;
       }
 
@@ -302,7 +302,7 @@ export class AnalyticsController {
   }
 
   @Get('revenue')
-  @Roles('SUPER_ADMIN', 'COOPERATIVE_ADMIN', 'TREASURER')
+  @Roles('SUPER_ADMIN', 'ORGANIZATION_ADMIN', 'TREASURER')
   @ApiOperation({
     summary: 'Get revenue analytics',
     description:
@@ -357,7 +357,7 @@ export class AnalyticsController {
   }
 
   @Get('summary')
-  @Roles('SUPER_ADMIN', 'COOPERATIVE_ADMIN', 'TREASURER', 'MEMBER')
+  @Roles('SUPER_ADMIN', 'ORGANIZATION_ADMIN', 'TREASURER', 'TENANT')
   @ApiOperation({
     summary: 'Get analytics summary',
     description:
@@ -422,7 +422,7 @@ export class AnalyticsController {
   }
 
   @Get('export')
-  @Roles('SUPER_ADMIN', 'COOPERATIVE_ADMIN', 'TREASURER')
+  @Roles('SUPER_ADMIN', 'ORGANIZATION_ADMIN', 'TREASURER')
   @ApiOperation({
     summary: 'Export analytics data',
     description: 'Export analytics data in CSV format for external analysis',
