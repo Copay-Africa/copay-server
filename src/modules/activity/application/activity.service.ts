@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { CreateActivityDto } from '../presentation/dto/create-activity.dto';
 import { ActivityResponseDto } from '../presentation/dto/activity-response.dto';
@@ -15,6 +15,8 @@ export interface ActivityContext {
 
 @Injectable()
 export class ActivityService {
+  private readonly logger = new Logger(ActivityService.name);
+
   constructor(private prismaService: PrismaService) {}
 
   async createActivity(
@@ -314,20 +316,27 @@ export class ActivityService {
     reason: string,
     context: Omit<ActivityContext, 'userId'>,
   ): Promise<void> {
-    await this.createActivity(
-      {
-        type: ActivityType.FAILED_LOGIN_ATTEMPT,
-        title: 'Failed Login Attempt',
-        description: `Failed login attempt for ${phone}: ${reason}`,
-        isSecurityEvent: true,
-        riskLevel: 'MEDIUM',
-        metadata: {
-          phone,
-          reason,
-        },
-      },
-      { ...context, userId: 'system' }, // Use system as userId for failed attempts
-    );
+    // For failed login attempts, we don't have a valid userId
+    // So we'll skip activity logging for now to prevent errors
+    // In a production system, you might want to create a separate FailedLoginAttempt model
+    // or make userId optional in the Activity model
+    
+    try {
+      // Log to console for monitoring purposes
+      this.logger.warn(`Failed login attempt for ${phone}: ${reason}`, {
+        phone,
+        reason,
+        ipAddress: context.ipAddress,
+        userAgent: context.userAgent,
+        timestamp: new Date().toISOString(),
+      });
+      
+      // Optionally, you could store this in a separate table or logging service
+      // For now, we'll just skip the database activity log to prevent ObjectId errors
+      
+    } catch (error) {
+      this.logger.error('Error logging failed login attempt:', error);
+    }
   }
 
   async logPinReset(
