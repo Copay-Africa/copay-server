@@ -105,7 +105,35 @@ export class RoomService {
       },
     });
 
-    return this.mapToResponseDto(room);
+    // Fetch the complete room information
+    const createdRoom = await this.prismaService.room.findUnique({
+      where: { id: room.id },
+      include: {
+        cooperative: {
+          select: {
+            id: true,
+            name: true,
+            code: true,
+            status: true,
+          },
+        },
+        userCooperativeRooms: {
+          where: { isActive: true },
+          include: {
+            user: {
+              select: {
+                id: true,
+                phone: true,
+                firstName: true,
+                lastName: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    return this.mapToResponseDto(createdRoom);
   }
 
   /**

@@ -1089,11 +1089,13 @@ The system comes with 8 predefined categories:
 
 ### Payment Types (Public)
 
-**Note:** These endpoints are public and don't require authentication.
+**Note:** These endpoints are public and don't require authentication. Payment types are defined at the cooperative level and automatically apply to all rooms within that cooperative.
 
 #### Get All Payment Types
 
 **GET** `/payment-types` 🌍 *Public*
+
+**Description:** Retrieve all payment types for a specific cooperative. Payment types are defined at the cooperative level and apply to all rooms within that cooperative.
 
 **Query Parameters:**
 
@@ -1216,6 +1218,10 @@ curl -X GET "https://api.copay.com/payment-types/507f1f77bcf86cd799439011?cooper
 
 **Required Roles:** `ORGANIZATION_ADMIN`, `SUPER_ADMIN`
 
+**Description:** Create a new payment type for the cooperative. This payment type will be available to all rooms within the cooperative automatically.
+
+**Request Body:**
+
 ```json
 {
   "name": "Monthly Rent",
@@ -1226,9 +1232,114 @@ curl -X GET "https://api.copay.com/payment-types/507f1f77bcf86cd799439011?cooper
   "minimumAmount": null,
   "dueDay": 1,
   "isRecurring": true,
-  "isActive": true
+  "settings": {
+    "reminderDays": [7, 3, 1],
+    "lateFeeAmount": 5000
+  }
 }
 ```
+
+**Field Descriptions:**
+
+- `name`: Payment type name (must be unique within the cooperative)
+- `description`: Optional description of the payment type
+- `amount`: Base amount for this payment type
+- `amountType`: Enum (`FIXED`, `PARTIAL`, `FLEXIBLE`)
+  - `FIXED`: Exact amount must be paid
+  - `PARTIAL`: Partial payments allowed 
+  - `FLEXIBLE`: Any amount can be paid
+- `allowPartialPayment`: Whether partial payments are allowed
+- `minimumAmount`: Minimum amount for partial payments (if allowed)
+- `dueDay`: Day of month when payment is due (1-31)
+- `isRecurring`: Whether this is a recurring payment
+- `settings`: Additional configuration (JSON object)
+
+**Response:**
+
+```json
+{
+  "id": "507f1f77bcf86cd799439016",
+  "name": "Monthly Rent",
+  "description": "Monthly rental payment for cooperative housing",
+  "amount": 50000,
+  "amountType": "FIXED",
+  "allowPartialPayment": false,
+  "minimumAmount": null,
+  "dueDay": 1,
+  "isRecurring": true,
+  "isActive": true,
+  "settings": {
+    "reminderDays": [7, 3, 1],
+    "lateFeeAmount": 5000
+  },
+  "cooperativeId": "507f1f77bcf86cd799439012",
+  "createdAt": "2025-11-30T08:00:00.000Z",
+  "updatedAt": "2025-11-30T08:00:00.000Z"
+}
+```
+
+#### Update Payment Type Status
+
+**PATCH** `/payment-types/:id/status` 🔒 *Requires Auth*
+
+**Required Roles:** `ORGANIZATION_ADMIN`, `SUPER_ADMIN`
+
+**Description:** Activate or deactivate a payment type. Deactivated payment types won't appear in public endpoints or mobile apps.
+
+**Request Body:**
+
+```json
+{
+  "isActive": false
+}
+```
+
+**Response:**
+
+```json
+{
+  "id": "507f1f77bcf86cd799439016",
+  "name": "Monthly Rent",
+  "isActive": false,
+  "updatedAt": "2025-11-30T08:15:00.000Z"
+}
+```
+
+#### Payment Type Management Examples
+
+```bash
+# Create a new payment type
+curl -X POST http://localhost:3000/payment-types \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Security Deposit",
+    "description": "One-time security deposit for new tenants",
+    "amount": 100000,
+    "amountType": "FIXED",
+    "allowPartialPayment": false,
+    "isRecurring": false,
+    "dueDay": 1
+  }'
+
+# Deactivate a payment type
+curl -X PATCH http://localhost:3000/payment-types/507f1f77bcf86cd799439016/status \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{"isActive": false}'
+
+# Get all payment types for management (as admin)
+curl -X GET "http://localhost:3000/payment-types?cooperativeId=507f1f77bcf86cd799439012&includeInactive=true" \
+  -H "Authorization: Bearer <token>"
+```
+
+**Management Notes:**
+
+- Payment types are scoped to the cooperative level
+- All rooms in the cooperative automatically inherit these payment types
+- Deactivated payment types remain in the database but are hidden from public APIs
+- Organization admins can only manage payment types within their cooperative
+- Super admins can manage payment types across all cooperatives
 
 ---
 
@@ -3606,6 +3717,79 @@ X-IremboPay-Signature: sha256=<signature>
 
 ## Integration Examples
 
+### Payment Type Management (Simplified System)
+
+The payment type system has been simplified to operate at the cooperative level:
+
+- **Cooperative-Level**: Payment types are created and managed by organization admins at the cooperative level
+- **Automatic Application**: All rooms within a cooperative automatically inherit the cooperative's payment types  
+- **No Room-Specific Assignment**: There's no need to assign payment types to individual rooms
+- **Public Access**: Payment types can be fetched without authentication for easy mobile app integration
+
+#### Organization Admin Workflow
+
+```javascript
+// 1. Create a new payment type (Organization Admin)
+const createPaymentType = async () => {
+  const response = await fetch('/v1/payment-types', {
+    method: 'POST',
+    headers: {
+      'Authorization': 'Bearer ' + adminToken,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      name: 'Monthly Rent',
+      description: 'Monthly rental payment',
+      amount: 150000,
+      amountType: 'FIXED',
+      allowPartialPayment: false,
+      dueDay: 1,
+      isRecurring: true,
+      settings: {
+        reminderDays: [7, 3, 1],
+        lateFeeAmount: 15000
+      }
+    })
+  });
+  return response.json();
+};
+
+// 2. Get all payment types for management (includes inactive)
+const getPaymentTypesForManagement = async (cooperativeId) => {
+  const response = await fetch(
+    `/v1/payment-types?cooperativeId=${cooperativeId}&includeInactive=true`,
+    {
+      headers: {
+        'Authorization': 'Bearer ' + adminToken
+      }
+    }
+  );
+  return response.json();
+};
+
+// 3. Deactivate a payment type
+const deactivatePaymentType = async (paymentTypeId) => {
+  const response = await fetch(`/v1/payment-types/${paymentTypeId}/status`, {
+    method: 'PATCH',
+    headers: {
+      'Authorization': 'Bearer ' + adminToken,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ isActive: false })
+  });
+  return response.json();
+};
+```
+
+#### Public Access for Mobile Apps
+
+```javascript
+// Get all payment types for a cooperative (applies to all rooms)
+const paymentTypes = await fetch(
+  'https://api.copay.com/payment-types/active?cooperativeId=507f1f77bcf86cd799439012'
+);
+```
+
 ### Mobile Money Payment Flow
 
 ```javascript
@@ -3826,7 +4010,69 @@ Use these test credentials:
 
 ## Room Management APIs
 
-The Room Management system provides comprehensive functionality for managing rooms within cooperatives, including room assignments, filtering, and notifications.
+The Room Management system provides comprehensive functionality for managing rooms within cooperatives, including room assignments, filtering, and notifications. Payment types are managed at the cooperative level and automatically apply to all rooms within that cooperative.
+
+### Create Room
+
+**POST** `/rooms`
+
+**Description:** Create a new room within a cooperative. Payment types are managed at the cooperative level and automatically available to all rooms.
+
+**Authorization:** Required (SUPER_ADMIN or ORGANIZATION_ADMIN)
+
+**Request Body:**
+
+```json
+{
+  "roomNumber": "A101",
+  "roomType": "1-BEDROOM",
+  "floor": "1",
+  "block": "A",
+  "description": "One bedroom apartment with balcony",
+  "status": "AVAILABLE",
+  "baseRent": 150000,
+  "deposit": 300000,
+  "cooperativeId": "507f1f77bcf86cd799439012",
+  "specifications": {
+    "bedrooms": 1,
+    "bathrooms": 1,
+    "hasBalcony": true,
+    "area": "45sqm"
+  }
+}
+```
+
+**Response:**
+
+```json
+{
+  "id": "507f1f77bcf86cd799439015",
+  "roomNumber": "A101",
+  "roomType": "1-BEDROOM",
+  "floor": "1",
+  "block": "A",
+  "description": "One bedroom apartment with balcony",
+  "status": "AVAILABLE",
+  "baseRent": 150000,
+  "deposit": 300000,
+  "specifications": {
+    "bedrooms": 1,
+    "bathrooms": 1,
+    "hasBalcony": true,
+    "area": "45sqm"
+  },
+  "cooperative": {
+    "id": "507f1f77bcf86cd799439012",
+    "name": "Green Valley Housing Cooperative",
+    "code": "GVH001",
+    "status": "ACTIVE"
+  },
+  "createdAt": "2025-01-10T08:00:00.000Z",
+  "updatedAt": "2025-01-10T08:00:00.000Z"
+}
+```
+
+**Note:** Payment types are managed at the cooperative level through the Payment Types API and are automatically available to all rooms in that cooperative.
 
 ### Get Rooms by Cooperative
 
@@ -3971,6 +4217,68 @@ GET /rooms?cooperativeId=507f1f77bcf86cd799439012&roomType=2-BEDROOM&floor=2
 }
 ```
 
+### Create Room
+
+**POST** `/rooms`
+
+**Description:** Create a new room within a cooperative. Payment types are managed at the cooperative level and automatically available to all rooms.
+
+**Authorization:** Required (SUPER_ADMIN or ORGANIZATION_ADMIN)
+
+**Request Body:**
+
+```json
+{
+  "roomNumber": "A101",
+  "roomType": "1-BEDROOM",
+  "floor": "1",
+  "block": "A",
+  "description": "One bedroom apartment with balcony",
+  "status": "AVAILABLE",
+  "baseRent": 150000,
+  "deposit": 300000,
+  "cooperativeId": "507f1f77bcf86cd799439012",
+  "specifications": {
+    "bedrooms": 1,
+    "bathrooms": 1,
+    "hasBalcony": true,
+    "area": "45sqm"
+  }
+}
+```
+
+**Response:**
+
+```json
+{
+  "id": "507f1f77bcf86cd799439015",
+  "roomNumber": "A101",
+  "roomType": "1-BEDROOM",
+  "floor": "1",
+  "block": "A",
+  "description": "One bedroom apartment with balcony",
+  "status": "AVAILABLE",
+  "baseRent": 150000,
+  "deposit": 300000,
+  "specifications": {
+    "bedrooms": 1,
+    "bathrooms": 1,
+    "hasBalcony": true,
+    "area": "45sqm"
+  },
+  "cooperative": {
+    "id": "507f1f77bcf86cd799439012",
+    "name": "Green Valley Housing Cooperative",
+    "code": "GVH001",
+    "status": "ACTIVE"
+  },
+  "createdAt": "2025-01-10T08:00:00.000Z",
+  "updatedAt": "2025-01-10T08:00:00.000Z"
+}
+```
+
+**Note:** Payment types are managed at the cooperative level through the Payment Types API and are automatically available to all rooms in that cooperative.
+
 ### Get Room by ID
 
 **GET** `/rooms/:id`
@@ -4097,11 +4405,15 @@ GET /rooms?cooperativeId=507f1f77bcf86cd799439012&roomType=2-BEDROOM&floor=2
 
 ### 🆕 Recent Additions (November 2025)
 
+- **Simplified Payment Types**: Payment types are now managed at the cooperative level only, automatically applying to all rooms
+- **Organization Admin Tools**: Comprehensive payment type CRUD operations with status management for cooperative admins
+- **Complete Analytics Module**: 8 comprehensive business intelligence endpoints for data-driven decisions
 - **Room Management APIs**: Complete room CRUD with cooperative filtering
 - **Room Assignment System**: Automatic SMS and in-app notifications  
 - **Enhanced User Profile**: `/users/me` now includes all cooperatives with rooms
 - **Room Statistics**: Comprehensive room analytics by cooperative
 - **Multi-cooperative Support**: Users can belong to multiple cooperatives
+- **Super Admin Management**: Super admin creation and tenant management capabilities
 
 ### Version 1.0.0 (Current)
 
