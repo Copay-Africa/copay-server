@@ -1278,6 +1278,105 @@ curl -X GET "https://api.copay.com/payment-types/507f1f77bcf86cd799439011?cooper
 }
 ```
 
+#### Update Payment Type
+
+**PATCH** `/payment-types/:id` 🔒 *Requires Auth*
+
+**Required Roles:** `ORGANIZATION_ADMIN`, `SUPER_ADMIN`
+
+**Description:** Update an existing payment type. All fields are optional, allowing partial updates.
+
+**Path Parameters:**
+- `id` (required): The payment type ID
+
+**Request Body:**
+
+```json
+{
+  "name": "Updated Monthly Rent",
+  "description": "Updated monthly rental payment for cooperative housing",
+  "amount": 55000,
+  "amountType": "PARTIAL",
+  "allowPartialPayment": true,
+  "minimumAmount": 20000,
+  "dueDay": 5,
+  "isRecurring": true,
+  "isActive": true,
+  "settings": {
+    "reminderDays": [10, 5, 1],
+    "lateFeeAmount": 7500,
+    "gracePeriodDays": 3
+  }
+}
+```
+
+**Response:**
+
+```json
+{
+  "id": "507f1f77bcf86cd799439016",
+  "name": "Updated Monthly Rent",
+  "description": "Updated monthly rental payment for cooperative housing",
+  "amount": 55000,
+  "amountType": "PARTIAL",
+  "allowPartialPayment": true,
+  "minimumAmount": 20000,
+  "dueDay": 5,
+  "isRecurring": true,
+  "isActive": true,
+  "settings": {
+    "reminderDays": [10, 5, 1],
+    "lateFeeAmount": 7500,
+    "gracePeriodDays": 3
+  },
+  "cooperativeId": "507f1f77bcf86cd799439012",
+  "createdAt": "2025-11-30T08:00:00.000Z",
+  "updatedAt": "2025-11-30T08:45:00.000Z"
+}
+```
+
+**Validation Rules:**
+- Payment type name must be unique within the cooperative
+- `minimumAmount` must be less than `amount` when `allowPartialPayment` is true
+- Only organization admins can update payment types in their cooperative
+- Super admins can update payment types across all cooperatives
+
+#### Delete Payment Type
+
+**DELETE** `/payment-types/:id` 🔒 *Requires Auth*
+
+**Required Roles:** `ORGANIZATION_ADMIN`, `SUPER_ADMIN`
+
+**Description:** Permanently delete a payment type. This operation is only allowed if no payments or reminders are associated with the payment type.
+
+**Path Parameters:**
+- `id` (required): The payment type ID
+
+**Response:** `204 No Content` on success
+
+**Safety Rules:**
+- Cannot delete if any payments exist for this payment type
+- Cannot delete if any reminders exist for this payment type  
+- Recommended to use deactivation (`PATCH /payment-types/:id/status`) instead for payment types with historical data
+
+**Error Examples:**
+
+```json
+// When payment type has associated payments
+{
+  "message": "Cannot delete payment type that has associated payments. Consider deactivating it instead.",
+  "error": "Bad Request",
+  "statusCode": 400
+}
+
+// When payment type has associated reminders
+{
+  "message": "Cannot delete payment type that has associated reminders. Consider deactivating it instead.",
+  "error": "Bad Request", 
+  "statusCode": 400
+}
+```
+
 #### Update Payment Type Status
 
 **PATCH** `/payment-types/:id/status` 🔒 *Requires Auth*
@@ -1328,6 +1427,24 @@ curl -X PATCH http://localhost:3000/payment-types/507f1f77bcf86cd799439016/statu
   -H "Content-Type: application/json" \
   -d '{"isActive": false}'
 
+# Update a payment type
+curl -X PATCH http://localhost:3000/payment-types/507f1f77bcf86cd799439016 \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "amount": 55000,
+    "allowPartialPayment": true,
+    "minimumAmount": 20000,
+    "settings": {
+      "reminderDays": [10, 5, 1],
+      "lateFeeAmount": 7500
+    }
+  }'
+
+# Delete a payment type (only if no associated payments/reminders)
+curl -X DELETE http://localhost:3000/payment-types/507f1f77bcf86cd799439016 \
+  -H "Authorization: Bearer <token>"
+
 # Get all payment types for management (as admin)
 curl -X GET "http://localhost:3000/payment-types?cooperativeId=507f1f77bcf86cd799439012&includeInactive=true" \
   -H "Authorization: Bearer <token>"
@@ -1337,7 +1454,9 @@ curl -X GET "http://localhost:3000/payment-types?cooperativeId=507f1f77bcf86cd79
 
 - Payment types are scoped to the cooperative level
 - All rooms in the cooperative automatically inherit these payment types
-- Deactivated payment types remain in the database but are hidden from public APIs
+- **Deactivation vs Deletion**:
+  - **Deactivate**: Use for payment types with historical data (payments/reminders) - hides from public APIs but preserves data integrity
+  - **Delete**: Only for payment types with no associated data - permanently removes from database
 - Organization admins can only manage payment types within their cooperative
 - Super admins can manage payment types across all cooperatives
 
@@ -3048,9 +3167,9 @@ Get comprehensive dashboard statistics including total counts and growth metrics
 
 **Query Parameters:**
 
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `period` | `TimePeriod` | `MONTH` | Time period for growth calculation |
+| Parameter | Type         | Default | Description                        |
+| --------- | ------------ | ------- | ---------------------------------- |
+| `period`  | `TimePeriod` | `MONTH` | Time period for growth calculation |
 
 **Response:**
 
@@ -3079,11 +3198,11 @@ Get detailed payment analytics with trends and breakdowns.
 
 **Query Parameters:**
 
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `period` | `TimePeriod` | `MONTH` | Analysis time period |
-| `startDate` | `Date` | - | Start date for analysis |
-| `endDate` | `Date` | - | End date for analysis |
+| Parameter   | Type         | Default | Description             |
+| ----------- | ------------ | ------- | ----------------------- |
+| `period`    | `TimePeriod` | `MONTH` | Analysis time period    |
+| `startDate` | `Date`       | -       | Start date for analysis |
+| `endDate`   | `Date`       | -       | End date for analysis   |
 
 **Response:**
 
@@ -3127,10 +3246,10 @@ Get comprehensive user behavior analytics.
 
 **Query Parameters:**
 
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `period` | `TimePeriod` | `MONTH` | Analysis time period |
-| `cooperativeId` | `string` | - | Filter by cooperative |
+| Parameter       | Type         | Default | Description           |
+| --------------- | ------------ | ------- | --------------------- |
+| `period`        | `TimePeriod` | `MONTH` | Analysis time period  |
+| `cooperativeId` | `string`     | -       | Filter by cooperative |
 
 **Response:**
 
@@ -3178,10 +3297,10 @@ Get detailed cooperative performance analytics.
 
 **Query Parameters:**
 
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `period` | `TimePeriod` | `MONTH` | Analysis time period |
-| `categoryId` | `string` | - | Filter by category |
+| Parameter    | Type         | Default | Description          |
+| ------------ | ------------ | ------- | -------------------- |
+| `period`     | `TimePeriod` | `MONTH` | Analysis time period |
+| `categoryId` | `string`     | -       | Filter by category   |
 
 **Response:**
 
@@ -3228,10 +3347,10 @@ Get comprehensive activity and engagement analytics.
 
 **Query Parameters:**
 
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `period` | `TimePeriod` | `MONTH` | Analysis time period |
-| `activityType` | `ActivityType` | - | Filter by activity type |
+| Parameter      | Type           | Default | Description             |
+| -------------- | -------------- | ------- | ----------------------- |
+| `period`       | `TimePeriod`   | `MONTH` | Analysis time period    |
+| `activityType` | `ActivityType` | -       | Filter by activity type |
 
 **Response:**
 
@@ -3284,10 +3403,10 @@ Get detailed revenue analytics with forecasting and trends.
 
 **Query Parameters:**
 
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `period` | `TimePeriod` | `MONTH` | Analysis time period |
-| `cooperativeId` | `string` | - | Filter by cooperative |
+| Parameter       | Type         | Default | Description           |
+| --------------- | ------------ | ------- | --------------------- |
+| `period`        | `TimePeriod` | `MONTH` | Analysis time period  |
+| `cooperativeId` | `string`     | -       | Filter by cooperative |
 
 **Response:**
 
@@ -3340,9 +3459,9 @@ Get a comprehensive summary of all analytics in a single request.
 
 **Query Parameters:**
 
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `period` | `TimePeriod` | `MONTH` | Analysis time period |
+| Parameter | Type         | Default | Description          |
+| --------- | ------------ | ------- | -------------------- |
+| `period`  | `TimePeriod` | `MONTH` | Analysis time period |
 
 **Response:**
 
@@ -3377,12 +3496,12 @@ Export analytics data in CSV format for external analysis.
 
 **Query Parameters:**
 
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `type` | `string` | - | Export type: `dashboard`, `payments`, `users`, `cooperatives`, `activities`, `revenue` |
-| `period` | `TimePeriod` | `MONTH` | Analysis time period |
-| `startDate` | `Date` | - | Start date for export |
-| `endDate` | `Date` | - | End date for export |
+| Parameter   | Type         | Default | Description                                                                            |
+| ----------- | ------------ | ------- | -------------------------------------------------------------------------------------- |
+| `type`      | `string`     | -       | Export type: `dashboard`, `payments`, `users`, `cooperatives`, `activities`, `revenue` |
+| `period`    | `TimePeriod` | `MONTH` | Analysis time period                                                                   |
+| `startDate` | `Date`       | -       | Start date for export                                                                  |
+| `endDate`   | `Date`       | -       | End date for export                                                                    |
 
 **Response:**
 - **Content-Type**: `text/csv`
@@ -3390,12 +3509,12 @@ Export analytics data in CSV format for external analysis.
 
 **Time Period Options:**
 
-| Period | Description |
-|--------|-------------|
-| `WEEK` | Last 7 days |
-| `MONTH` | Last 30 days |
-| `QUARTER` | Last 90 days |
-| `YEAR` | Last 365 days |
+| Period    | Description   |
+| --------- | ------------- |
+| `WEEK`    | Last 7 days   |
+| `MONTH`   | Last 30 days  |
+| `QUARTER` | Last 90 days  |
+| `YEAR`    | Last 365 days |
 
 **Role-Based Access:**
 
@@ -3778,6 +3897,52 @@ const deactivatePaymentType = async (paymentTypeId) => {
     body: JSON.stringify({ isActive: false })
   });
   return response.json();
+};
+
+// 4. Update a payment type
+const updatePaymentType = async (paymentTypeId, updates) => {
+  const response = await fetch(`/v1/payment-types/${paymentTypeId}`, {
+    method: 'PATCH',
+    headers: {
+      'Authorization': 'Bearer ' + adminToken,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(updates)
+  });
+  return response.json();
+};
+
+// Example: Update payment amount and enable partial payments
+await updatePaymentType('507f1f77bcf86cd799439016', {
+  amount: 55000,
+  allowPartialPayment: true,
+  minimumAmount: 20000,
+  settings: {
+    reminderDays: [10, 5, 1],
+    lateFeeAmount: 7500
+  }
+});
+
+// 5. Delete a payment type (with safety checks)
+const deletePaymentType = async (paymentTypeId) => {
+  try {
+    const response = await fetch(`/v1/payment-types/${paymentTypeId}`, {
+      method: 'DELETE',
+      headers: {
+        'Authorization': 'Bearer ' + adminToken
+      }
+    });
+    
+    if (response.status === 204) {
+      console.log('Payment type deleted successfully');
+    } else if (response.status === 400) {
+      const error = await response.json();
+      console.log('Cannot delete:', error.message);
+      // Consider deactivating instead
+    }
+  } catch (error) {
+    console.error('Delete failed:', error);
+  }
 };
 ```
 

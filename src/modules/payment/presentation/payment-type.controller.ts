@@ -6,6 +6,7 @@ import {
   Param,
   Query,
   Patch,
+  Delete,
   UseGuards,
   BadRequestException,
 } from '@nestjs/common';
@@ -17,6 +18,7 @@ import {
 } from '@nestjs/swagger';
 import { PaymentTypeService } from '../application/payment-type.service';
 import { CreatePaymentTypeDto } from './dto/create-payment-type.dto';
+import { UpdatePaymentTypeDto } from './dto/update-payment-type.dto';
 import { PaymentTypeResponseDto } from './dto/payment-type-response.dto';
 import { PaymentTypeSearchDto } from './dto/payment-type-search.dto';
 import { PaymentTypeQueryDto } from './dto/payment-type-query.dto';
@@ -132,6 +134,57 @@ export class PaymentTypeController {
     @Query() queryDto: PaymentTypeOptionalQueryDto,
   ): Promise<PaymentTypeResponseDto> {
     return await this.paymentTypeService.findByIdPublic(id, queryDto.cooperativeId);
+  }
+
+  @Patch(':id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ORGANIZATION_ADMIN', 'SUPER_ADMIN')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Update payment type' })
+  @ApiResponse({
+    status: 200,
+    description: 'Payment type updated successfully',
+    type: PaymentTypeResponseDto,
+  })
+  @ApiResponse({ status: 400, description: 'Bad request' })
+  @ApiResponse({ status: 404, description: 'Payment type not found' })
+  @ApiResponse({ status: 409, description: 'Payment type name already exists' })
+  async update(
+    @Param('id') id: string,
+    @Body() updatePaymentTypeDto: UpdatePaymentTypeDto,
+    @CurrentUser() currentUser: AuthenticatedUser,
+  ): Promise<PaymentTypeResponseDto> {
+    return this.paymentTypeService.update(
+      id,
+      updatePaymentTypeDto,
+      currentUser.cooperativeId!,
+      currentUser.role as UserRole,
+    );
+  }
+
+  @Delete(':id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ORGANIZATION_ADMIN', 'SUPER_ADMIN')
+  @ApiBearerAuth()
+  @ApiOperation({ 
+    summary: 'Delete payment type',
+    description: 'Hard delete a payment type. Only allowed if no payments or reminders are associated with it.'
+  })
+  @ApiResponse({
+    status: 204,
+    description: 'Payment type deleted successfully',
+  })
+  @ApiResponse({ status: 400, description: 'Cannot delete payment type with associated data' })
+  @ApiResponse({ status: 404, description: 'Payment type not found' })
+  async delete(
+    @Param('id') id: string,
+    @CurrentUser() currentUser: AuthenticatedUser,
+  ): Promise<void> {
+    return this.paymentTypeService.delete(
+      id,
+      currentUser.cooperativeId!,
+      currentUser.role as UserRole,
+    );
   }
 
   @Patch(':id/status')

@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { CreatePaymentTypeDto } from '../presentation/dto/create-payment-type.dto';
+import { UpdatePaymentTypeDto } from '../presentation/dto/update-payment-type.dto';
 import { PaymentTypeResponseDto } from '../presentation/dto/payment-type-response.dto';
 import { PaymentTypeSearchDto } from '../presentation/dto/payment-type-search.dto';
 import { PaginationDto } from '../../../shared/dto/pagination.dto';
@@ -181,6 +182,147 @@ export class PaymentTypeService {
     }
 
     return this.mapToResponseDto(paymentType);
+  }
+
+  async update(
+    id: string,
+    updatePaymentTypeDto: UpdatePaymentTypeDto,
+    cooperativeId: string,
+    currentUserRole: UserRole,
+  ): Promise<PaymentTypeResponseDto> {
+    // Only Organization Admins and Super Admins can update payment types
+    if (currentUserRole === UserRole.TENANT) {
+      throw new ForbiddenException('Tenants cannot update payment types');
+    }
+
+    const paymentType = await this.prismaService.paymentType.findUnique({
+      where: { id },
+    });
+
+    if (!paymentType) {
+      throw new NotFoundException('Payment type not found');
+    }
+
+    // Check tenant isolation
+    if (
+      currentUserRole !== UserRole.SUPER_ADMIN &&
+      paymentType.cooperativeId !== cooperativeId
+    ) {
+      throw new ForbiddenException('Access denied');
+    }
+
+    // Validate minimum amount for partial payments if provided
+    if (
+      updatePaymentTypeDto.allowPartialPayment &&
+      updatePaymentTypeDto.minimumAmount &&
+      updatePaymentTypeDto.amount &&
+      updatePaymentTypeDto.minimumAmount >= updatePaymentTypeDto.amount
+    ) {
+      throw new BadRequestException(
+        'Minimum amount must be less than the base amount',
+      );
+    }
+
+    // If updating minimum amount but allowPartialPayment is not updated, check existing value
+    if (
+      updatePaymentTypeDto.minimumAmount &&
+      updatePaymentTypeDto.amount &&
+      (updatePaymentTypeDto.allowPartialPayment ?? paymentType.allowPartialPayment) &&
+      updatePaymentTypeDto.minimumAmount >= updatePaymentTypeDto.amount
+    ) {
+      throw new BadRequestException(
+        'Minimum amount must be less than the base amount',
+      );
+    }
+
+    // Check if name is being updated and already exists
+    if (updatePaymentTypeDto.name && updatePaymentTypeDto.name !== paymentType.name) {
+      const existingPaymentType = await this.prismaService.paymentType.findFirst({
+        where: {
+          cooperativeId: paymentType.cooperativeId,
+          name: updatePaymentTypeDto.name,
+          id: { not: id }, // Exclude current payment type
+        },
+      });
+
+      if (existingPaymentType) {
+        throw new ConflictException(
+          'Payment type with this name already exists in the cooperative',
+        );
+      }
+    }
+
+    const updatedPaymentType = await this.prismaService.paymentType.update({
+      where: { id },
+      data: updatePaymentTypeDto,
+    });
+
+    // Clear cache for this cooperative's payment types
+    await this.paymentCacheService.invalidateCooperativePaymentTypes(
+      paymentType.cooperativeId,
+    );
+
+    return this.mapToResponseDto(updatedPaymentType);
+  }
+
+  async delete(
+    id: string,
+    cooperativeId: string,
+    currentUserRole: UserRole,
+  ): Promise<void> {
+    // Only Organization Admins and Super Admins can delete payment types
+    if (currentUserRole === UserRole.TENANT) {
+      throw new ForbiddenException('Tenants cannot delete payment types');
+    }
+
+    const paymentType = await this.prismaService.paymentType.findUnique({
+      where: { id },
+      include: {
+        payments: {
+          take: 1, // Just check if any payments exist
+        },
+      },
+    });
+
+    if (!paymentType) {
+      throw new NotFoundException('Payment type not found');
+    }
+
+    // Check tenant isolation
+    if (
+      currentUserRole !== UserRole.SUPER_ADMIN &&
+      paymentType.cooperativeId !== cooperativeId
+    ) {
+      throw new ForbiddenException('Access denied');
+    }
+
+    // Check if payment type has associated payments
+    if (paymentType.payments && paymentType.payments.length > 0) {
+      throw new BadRequestException(
+        'Cannot delete payment type that has associated payments. Consider deactivating it instead.',
+      );
+    }
+
+    // Check if payment type has associated reminders
+    const reminderCount = await this.prismaService.reminder.count({
+      where: { paymentTypeId: id },
+    });
+
+    if (reminderCount > 0) {
+      throw new BadRequestException(
+        'Cannot delete payment type that has associated reminders. Consider deactivating it instead.',
+      );
+    }
+
+    // Hard delete the payment type
+    await this.prismaService.paymentType.delete({
+      where: { id },
+    });
+
+    // Clear cache for this cooperative's payment types
+    await this.paymentCacheService.invalidateCooperativePaymentTypes(
+      paymentType.cooperativeId,
+    );
   }
 
   async updateStatus(
