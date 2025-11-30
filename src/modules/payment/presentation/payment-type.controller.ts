@@ -19,6 +19,9 @@ import { PaymentTypeService } from '../application/payment-type.service';
 import { CreatePaymentTypeDto } from './dto/create-payment-type.dto';
 import { PaymentTypeResponseDto } from './dto/payment-type-response.dto';
 import { PaymentTypeSearchDto } from './dto/payment-type-search.dto';
+import { PaymentTypeQueryDto } from './dto/payment-type-query.dto';
+import { PaymentTypeActiveQueryDto } from './dto/payment-type-active-query.dto';
+import { PaymentTypeOptionalQueryDto } from './dto/payment-type-optional-query.dto';
 import { PaginationDto } from '../../../shared/dto/pagination.dto';
 import { PaginatedResponseDto } from '../../../shared/dto/paginated-response.dto';
 import { JwtAuthGuard } from '../../../shared/guards/jwt-auth.guard';
@@ -86,17 +89,12 @@ export class PaymentTypeController {
     type: PaginatedResponseDto<PaymentTypeResponseDto>,
   })
   async findAll(
-    @Query() paginationDto: PaginationDto,
-    @Query('includeInactive') includeInactive: boolean = false,
-    @Query('cooperativeId') cooperativeId: string,
+    @Query() queryDto: PaymentTypeQueryDto,
   ): Promise<PaginatedResponseDto<PaymentTypeResponseDto>> {
-    if (!cooperativeId) {
-      throw new BadRequestException('Cooperative ID is required');
-    }
     return this.paymentTypeService.findAllByCooperative(
-      cooperativeId,
-      paginationDto,
-      includeInactive,
+      queryDto.cooperativeId,
+      queryDto,
+      queryDto.includeInactive,
     );
   }
 
@@ -113,12 +111,9 @@ export class PaymentTypeController {
     type: [PaymentTypeResponseDto],
   })
   async getActive(
-    @Query('cooperativeId') cooperativeId: string,
+    @Query() queryDto: PaymentTypeActiveQueryDto,
   ): Promise<PaymentTypeResponseDto[]> {
-    if (!cooperativeId) {
-      throw new BadRequestException('Cooperative ID is required');
-    }
-    return this.paymentTypeService.getActivePaymentTypesForCache(cooperativeId);
+    return this.paymentTypeService.getActivePaymentTypesForCache(queryDto.cooperativeId);
   }
 
   @Get(':id')
@@ -134,9 +129,9 @@ export class PaymentTypeController {
   })
   async findOne(
     @Param('id') id: string,
-    @Query('cooperativeId') cooperativeId?: string,
+    @Query() queryDto: PaymentTypeOptionalQueryDto,
   ): Promise<PaymentTypeResponseDto> {
-    return await this.paymentTypeService.findByIdPublic(id, cooperativeId);
+    return await this.paymentTypeService.findByIdPublic(id, queryDto.cooperativeId);
   }
 
   @Patch(':id/status')
