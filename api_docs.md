@@ -511,6 +511,36 @@ Some endpoints are public and don't require authentication:
 - Status must be a valid UserStatus enum value
 - SMS notifications are sent automatically (failure won't affect the approval/rejection process)
 
+#### Delete User
+
+**DELETE** `/users/:id`
+
+**Required Roles:** `SUPER_ADMIN`
+
+**Description:** Delete any user type with automatic cleanup of all related data. The system automatically detects and handles all relationships and dependencies.
+
+**Automatic Cleanup:**
+- **Room Assignments**: Automatically ends any active room assignments
+- **Related Data**: Handles all user relationships and dependencies
+- **Smart Deletion Logic**: 
+  - Soft delete (set status to INACTIVE) if user has payment history
+  - Hard delete if user has no payment history
+- **Data Integrity**: Ensures referential integrity across all related data
+
+**Response:**
+
+```json
+{
+  "message": "User deleted successfully"
+}
+```
+
+**Features:**
+- Works for all user types (TENANT, ORGANIZATION_ADMIN, SUPER_ADMIN)
+- Automatic detection and cleanup of all related data
+- Maintains audit trail with proper timestamps and notes
+- Cache invalidation for optimal performance
+
 ```json
 {
   "isActive": false
@@ -4755,22 +4785,7 @@ GET /rooms?cooperativeId=507f1f77bcf86cd799439012&roomType=2-BEDROOM&floor=2
 
 - **Description**: Update tenant information, move between cooperatives, reset PIN, or change status
 
-### Delete Tenant (Super Admin Only)
-
-- **DELETE** `/api/v1/users/tenants/:id`
-- **Auth**: Required (SUPER_ADMIN role)
-- **Description**:
-  - **Room Assignment Cleanup**: Automatically ends any active room assignments before deletion
-  - **Smart Deletion Logic**:
-    - Soft delete (set status to INACTIVE) if tenant has payment history
-    - Hard delete if tenant has no payments
-  - **Data Integrity**: Ensures room assignments are properly closed to prevent conflicts
-- **Response**: Confirmation message
-
-**Additional Room Assignment Cleanup:**
-- When a user status is changed to `INACTIVE` or `SUSPENDED`, all active room assignments are automatically ended
-- When a tenant application is rejected during approval process, any room assignments are terminated
-- Room assignment end date is set to current timestamp with appropriate notes
+**Note**: For user deletion, use the general DELETE `/users/:id` endpoint which automatically handles all user types and related data cleanup.
 
 ### Tenant Management Features
 
@@ -4780,7 +4795,7 @@ GET /rooms?cooperativeId=507f1f77bcf86cd799439012&roomType=2-BEDROOM&floor=2
 - **Flexible Filtering**: Filter by status, cooperative, registration date
 - **Cooperative Migration**: Move tenants between cooperatives
 - **PIN Reset**: Reset tenant PINs for account recovery
-- **Smart Deletion**: Preserves data integrity for tenants with payment history
+- **Smart Deletion**: Use general user delete endpoint for comprehensive cleanup
 
 ---
 

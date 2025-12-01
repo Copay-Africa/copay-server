@@ -678,13 +678,13 @@ export class UserService {
     return await this.mapToTenantDetailDto(updatedTenant);
   }
 
-  async deleteTenant(id: string): Promise<void> {
-    const tenant = await this.prismaService.user.findUnique({
+  async deleteUser(id: string): Promise<void> {
+    const user = await this.prismaService.user.findUnique({
       where: { id },
     });
 
-    if (!tenant) {
-      throw new NotFoundException('Tenant not found');
+    if (!user) {
+      throw new NotFoundException('User not found');
     }
 
     // First, handle room assignments - end any active room assignments
@@ -700,7 +700,7 @@ export class UserService {
       },
     });
 
-    // Check if tenant has payments (soft delete recommended)
+    // Check if user has payments (soft delete recommended)
     const paymentCount = await this.prismaService.payment.count({
       where: { senderId: id },
     });

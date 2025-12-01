@@ -259,18 +259,18 @@ export class UserController {
     return this.userService.updateTenant(id, updateTenantDto);
   }
 
-  @Delete('tenants/:id')
+  @Delete(':id')
   @Roles('SUPER_ADMIN')
   @ApiOperation({
-    summary: 'Delete tenant (Super Admin only)',
-    description: 'Soft delete if tenant has payments, hard delete otherwise',
+    summary: 'Delete user',
+    description: 'Delete any user type with automatic cleanup of all related data (room assignments, etc.). Smart deletion logic applies based on payment history.',
   })
   @ApiResponse({
     status: 200,
-    description: 'Tenant deleted successfully',
+    description: 'User deleted successfully',
   })
-  async deleteTenant(@Param('id') id: string): Promise<{ message: string }> {
-    await this.userService.deleteTenant(id);
-    return { message: 'Tenant deleted successfully' };
+  async deleteUser(@Param('id') id: string): Promise<{ message: string }> {
+    await this.userService.deleteUser(id);
+    return { message: 'User deleted successfully' };
   }
 }
