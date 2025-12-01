@@ -101,6 +101,21 @@ export class FdiSmsProvider implements SmsProvider {
       };
     }
 
+    // Validate required configuration
+    if (!this.username || !this.password || !this.baseUrl || !this.senderId) {
+      this.logger.error('SMS configuration incomplete', {
+        hasUsername: !!this.username,
+        hasPassword: !!this.password,
+        hasBaseUrl: !!this.baseUrl,
+        hasSenderId: !!this.senderId,
+      });
+      return {
+        success: false,
+        message: 'SMS configuration incomplete',
+        error: 'CONFIGURATION_ERROR',
+      };
+    }
+
     // Authenticate first
     const isAuthenticated = await this.authenticate();
     if (!isAuthenticated) {
@@ -139,6 +154,8 @@ export class FdiSmsProvider implements SmsProvider {
       this.logger.log(
         `Sending SMS to ${cleanPhoneNumber} with msgRef: ${msgRef}`,
       );
+      this.logger.debug(`SMS request payload: ${JSON.stringify(smsRequest)}`);
+      this.logger.debug(`SMS provider config - baseUrl: ${this.baseUrl}, senderId: ${this.senderId}`);
 
       const response = await fetch(`${this.baseUrl}/mt/single`, {
         method: 'POST',
@@ -151,6 +168,15 @@ export class FdiSmsProvider implements SmsProvider {
       });
 
       if (!response.ok) {
+        // Get the response body for detailed error information
+        let errorDetails = '';
+        try {
+          const errorBody = await response.text();
+          errorDetails = errorBody ? ` - ${errorBody}` : '';
+        } catch (e) {
+          // Ignore if we can't read the response body
+        }
+
         // If unauthorized, clear token and retry once
         if (response.status === 401 || response.status === 403) {
           this.logger.warn('Token expired, retrying authentication');
@@ -171,8 +197,15 @@ export class FdiSmsProvider implements SmsProvider {
             });
 
             if (!retryResponse.ok) {
+              let retryErrorDetails = '';
+              try {
+                const retryErrorBody = await retryResponse.text();
+                retryErrorDetails = retryErrorBody ? ` - ${retryErrorBody}` : '';
+              } catch (e) {
+                // Ignore if we can't read the response body
+              }
               throw new Error(
-                `SMS request failed after retry: ${retryResponse.status} ${retryResponse.statusText}`,
+                `SMS request failed after retry: ${retryResponse.status} ${retryResponse.statusText}${retryErrorDetails}`,
               );
             }
 
@@ -181,8 +214,10 @@ export class FdiSmsProvider implements SmsProvider {
           }
         }
 
+        this.logger.error(`SMS request failed with status ${response.status}: ${response.statusText}${errorDetails}`);
+        this.logger.error(`SMS request body: ${JSON.stringify(smsRequest)}`);
         throw new Error(
-          `SMS request failed: ${response.status} ${response.statusText}`,
+          `SMS request failed: ${response.status} ${response.statusText}${errorDetails}`,
         );
       }
 
