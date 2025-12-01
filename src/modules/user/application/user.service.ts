@@ -712,17 +712,65 @@ export class UserService {
         data: { status: UserStatus.INACTIVE },
       });
     } else {
-      // Hard delete if no payments - need to delete related records first
-      // Delete all room assignments (both active and inactive)
-      await this.prismaService.userCooperativeRoom.deleteMany({
-        where: {
-          userId: id,
-        },
-      });
+      // Hard delete if no payments - need to delete all related records first
+      await this.prismaService.$transaction(async (tx) => {
+        // 1. Delete all room assignments
+        await tx.userCooperativeRoom.deleteMany({
+          where: { userId: id },
+        });
 
-      // Now safe to delete the user
-      await this.prismaService.user.delete({
-        where: { id },
+        // 2. Delete notifications
+        await tx.notification.deleteMany({
+          where: { userId: id },
+        });
+
+        // 3. Delete reminders
+        await tx.reminder.deleteMany({
+          where: { userId: id },
+        });
+
+        // 4. Delete activities
+        await tx.activity.deleteMany({
+          where: { userId: id },
+        });
+
+        // 5. Delete complaints
+        await tx.complaint.deleteMany({
+          where: { userId: id },
+        });
+
+        // 6. Update account requests to remove user reference (both userId and processedBy)
+        await tx.accountRequest.updateMany({
+          where: { 
+            OR: [
+              { userId: id },
+              { processedBy: id }
+            ]
+          },
+          data: { 
+            userId: null,
+            processedBy: null 
+          },
+        });
+
+        // 7. Update balance transactions to remove processedBy reference
+        await tx.balanceTransaction.updateMany({
+          where: {
+            OR: [
+              { processedBy: id },
+              { approvedBy: id }
+            ]
+          },
+          data: {
+            processedBy: null,
+            approvedBy: null
+          },
+        });
+
+        // 8. Finally, delete the user
+        await tx.user.delete({
+          where: { id },
+        });
       });
     }
 

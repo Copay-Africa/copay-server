@@ -521,10 +521,15 @@ Some endpoints are public and don't require authentication:
 
 **Automatic Cleanup:**
 - **Room Assignments**: Automatically ends any active room assignments
-- **Related Data**: Handles all user relationships and dependencies
+- **Notifications**: Removes user notifications (for hard delete)
+- **Reminders**: Removes user reminders (for hard delete) 
+- **Activities**: Removes user activity records (for hard delete)
+- **Complaints**: Removes user complaints (for hard delete)
+- **Account Requests**: Updates account requests to remove user references
+- **Balance Transactions**: Updates balance transactions to remove user references
 - **Smart Deletion Logic**: 
   - Soft delete (set status to INACTIVE) if user has payment history
-  - Hard delete if user has no payment history
+  - Hard delete with complete cleanup if user has no payment history
 - **Data Integrity**: Ensures referential integrity across all related data
 
 **Response:**
