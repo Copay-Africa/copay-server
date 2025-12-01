@@ -687,19 +687,6 @@ export class UserService {
       throw new NotFoundException('User not found');
     }
 
-    // First, handle room assignments - end any active room assignments
-    await this.prismaService.userCooperativeRoom.updateMany({
-      where: {
-        userId: id,
-        isActive: true,
-      },
-      data: {
-        isActive: false,
-        endDate: new Date(),
-        notes: 'User deleted - room assignment ended automatically',
-      },
-    });
-
     // Check if user has payments (soft delete recommended)
     const paymentCount = await this.prismaService.payment.count({
       where: { senderId: id },
@@ -707,12 +694,33 @@ export class UserService {
 
     if (paymentCount > 0) {
       // Soft delete by setting status to INACTIVE
+      // First, handle room assignments - end any active room assignments
+      await this.prismaService.userCooperativeRoom.updateMany({
+        where: {
+          userId: id,
+          isActive: true,
+        },
+        data: {
+          isActive: false,
+          endDate: new Date(),
+          notes: 'User deleted - room assignment ended automatically',
+        },
+      });
+
       await this.prismaService.user.update({
         where: { id },
         data: { status: UserStatus.INACTIVE },
       });
     } else {
-      // Hard delete if no payments
+      // Hard delete if no payments - need to delete related records first
+      // Delete all room assignments (both active and inactive)
+      await this.prismaService.userCooperativeRoom.deleteMany({
+        where: {
+          userId: id,
+        },
+      });
+
+      // Now safe to delete the user
       await this.prismaService.user.delete({
         where: { id },
       });
