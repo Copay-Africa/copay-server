@@ -20,6 +20,8 @@ import { PaginationDto } from '../../../shared/dto/pagination.dto';
 import { PaginatedResponseDto } from '../../../shared/dto/paginated-response.dto';
 import { UserRole, UserStatus } from '@prisma/client';
 import { EnhancedCacheService } from '../../../shared/services/enhanced-cache.service';
+import { SmsService } from '../../sms/application/sms.service';
+import { ApproveTenantDto } from '../presentation/dto/approve-tenant.dto';
 import * as bcrypt from 'bcryptjs';
 
 @Injectable()
@@ -27,6 +29,7 @@ export class UserService {
   constructor(
     private prismaService: PrismaService,
     private cacheService: EnhancedCacheService,
+    private smsService: SmsService,
   ) {}
 
   async create(
@@ -188,11 +191,125 @@ export class UserService {
       throw new NotFoundException('User not found');
     }
 
+    // If user is being set to INACTIVE or SUSPENDED, end their active room assignments
+    if (status === UserStatus.INACTIVE || status === UserStatus.SUSPENDED) {
+      await this.prismaService.userCooperativeRoom.updateMany({
+        where: {
+          userId: id,
+          isActive: true,
+        },
+        data: {
+          isActive: false,
+          endDate: new Date(),
+          notes: `User status changed to ${status} - room assignment ended automatically`,
+        },
+      });
+    }
+
     const updatedUser = await this.prismaService.user.update({
       where: { id },
       data: { status },
       include: { cooperative: true },
     });
+
+    // Invalidate cache for this user
+    await this.cacheService.invalidateByTags([`user:${id}`]);
+
+    return this.mapToResponseDto(updatedUser);
+  }
+
+  /**
+   * Generates a random 4-digit PIN
+   */
+  private generateRandomPin(): string {
+    return Math.floor(1000 + Math.random() * 9000).toString();
+  }
+
+  /**
+   * Approve or reject a tenant with SMS notifications and PIN generation
+   */
+  async approveTenant(
+    id: string,
+    approveTenantDto: ApproveTenantDto,
+  ): Promise<UserResponseDto> {
+    const user = await this.prismaService.user.findUnique({
+      where: { id },
+      include: { cooperative: true },
+    });
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    if (user.role !== 'TENANT') {
+      throw new ForbiddenException('This action can only be performed on tenants');
+    }
+
+    // Check if tenant is in PENDING status
+    if (user.status !== UserStatus.PENDING) {
+      throw new ForbiddenException('Only pending tenants can be approved or rejected');
+    }
+
+    let updatedUser;
+    
+    if (approveTenantDto.status === UserStatus.ACTIVE) {
+      // Approval flow: Generate new PIN and send SMS with credentials
+      const newPin = this.generateRandomPin();
+      const hashedPin = await bcrypt.hash(newPin, 12);
+
+      updatedUser = await this.prismaService.user.update({
+        where: { id },
+        data: { 
+          status: UserStatus.ACTIVE,
+          pin: hashedPin,
+        },
+        include: { cooperative: true },
+      });
+
+      // Send approval SMS with credentials
+      try {
+        const approvalMessage = `Congratulations ${user.firstName}! Your COPAY account has been APPROVED. Your login PIN is: ${newPin}. Please change this PIN after your first login for security. Welcome to ${user.cooperative?.name || 'COPAY'}!`;
+        
+        await this.smsService.sendSms(user.phone, approvalMessage);
+      } catch (smsError) {
+        console.error('Failed to send approval SMS:', smsError);
+        // Continue with approval even if SMS fails
+      }
+    } else {
+      // Rejection flow: Update status and send rejection SMS
+      // If user is being rejected (typically INACTIVE or SUSPENDED), end any room assignments
+      if (approveTenantDto.status === UserStatus.INACTIVE || approveTenantDto.status === UserStatus.SUSPENDED) {
+        await this.prismaService.userCooperativeRoom.updateMany({
+          where: {
+            userId: id,
+            isActive: true,
+          },
+          data: {
+            isActive: false,
+            endDate: new Date(),
+            notes: `Tenant application rejected - room assignment ended automatically`,
+          },
+        });
+      }
+
+      updatedUser = await this.prismaService.user.update({
+        where: { id },
+        data: { 
+          status: approveTenantDto.status,
+        },
+        include: { cooperative: true },
+      });
+
+      // Send rejection SMS
+      try {
+        const rejectionMessage = `Hello ${user.firstName}, unfortunately your COPAY account application has been rejected. ${approveTenantDto.rejectionReason ? `Reason: ${approveTenantDto.rejectionReason}` : ''} Please contact support for more information.`;
+        
+        await this.smsService.sendSms(user.phone, rejectionMessage);
+      } catch (smsError) {
+        console.error('Failed to send rejection SMS:', smsError);
+        // Continue with rejection even if SMS fails
+      }
+    }
 
     // Invalidate cache for this user
     await this.cacheService.invalidateByTags([`user:${id}`]);
@@ -570,6 +687,19 @@ export class UserService {
       throw new NotFoundException('Tenant not found');
     }
 
+    // First, handle room assignments - end any active room assignments
+    await this.prismaService.userCooperativeRoom.updateMany({
+      where: {
+        userId: id,
+        isActive: true,
+      },
+      data: {
+        isActive: false,
+        endDate: new Date(),
+        notes: 'User deleted - room assignment ended automatically',
+      },
+    });
+
     // Check if tenant has payments (soft delete recommended)
     const paymentCount = await this.prismaService.payment.count({
       where: { senderId: id },
@@ -587,6 +717,9 @@ export class UserService {
         where: { id },
       });
     }
+
+    // Invalidate cache for this user
+    await this.cacheService.invalidateByTags([`user:${id}`]);
   }
 
   async getTenantStats(): Promise<{

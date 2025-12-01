@@ -34,6 +34,7 @@ import { Roles } from '../../../shared/decorators/auth.decorator';
 import { CurrentUser } from '../../../shared/decorators/current-user.decorator';
 import { AuthenticatedUser } from '../../../shared/decorators/current-user.decorator';
 import { UserRole, UserStatus } from '@prisma/client';
+import { ApproveTenantDto } from './dto/approve-tenant.dto';
 
 @ApiTags('Users')
 @Controller('users')
@@ -140,6 +141,24 @@ export class UserController {
     @Body('status') status: UserStatus,
   ): Promise<UserResponseDto> {
     return this.userService.updateStatus(id, status);
+  }
+
+  @Patch(':id/approve')
+  @Roles('SUPER_ADMIN', 'ORGANIZATION_ADMIN')
+  @ApiOperation({ 
+    summary: 'Approve or reject tenant with SMS notification',
+    description: 'Approve tenant (generates PIN and sends SMS with credentials) or reject tenant (sends rejection SMS with reason)'
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Tenant approval/rejection processed successfully',
+    type: UserResponseDto,
+  })
+  async approveTenant(
+    @Param('id') id: string,
+    @Body() approveTenantDto: ApproveTenantDto,
+  ): Promise<UserResponseDto> {
+    return this.userService.approveTenant(id, approveTenantDto);
   }
 
   // Super Admin Tenant Management Endpoints

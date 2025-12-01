@@ -448,6 +448,69 @@ Some endpoints are public and don't require authentication:
 
 **PATCH** `/users/:id/status`
 
+**Required Roles:** `SUPER_ADMIN`, `ORGANIZATION_ADMIN`
+
+**Description:** Update user status for general status changes.
+
+```json
+{
+  "status": "ACTIVE"
+}
+```
+
+#### Approve/Reject Tenant
+
+**PATCH** `/users/:id/approve`
+
+**Required Roles:** `SUPER_ADMIN`, `ORGANIZATION_ADMIN`
+
+**Description:** Approve or reject tenant applications with SMS notifications. When approving, generates a random PIN and sends SMS with credentials. When rejecting, sends SMS with rejection reason.
+
+**Request Body:**
+
+```json
+{
+  "status": "ACTIVE",
+  "rejectionReason": "Optional rejection reason (required for rejections)"
+}
+```
+
+**Approval Flow (status: "ACTIVE"):**
+- Generates random 4-digit PIN
+- Updates user status to ACTIVE
+- Sends SMS with login credentials: "Congratulations [Name]! Your COPAY account has been APPROVED. Your login PIN is: [PIN]. Please change this PIN after your first login for security. Welcome to [Cooperative]!"
+
+**Rejection Flow (status: "INACTIVE", "SUSPENDED", etc.):**
+- Updates user status accordingly
+- Sends SMS with rejection notification: "Hello [Name], unfortunately your COPAY account application has been rejected. Reason: [rejectionReason] Please contact support for more information."
+
+**Response:**
+
+```json
+{
+  "id": "507f1f77bcf86cd799439014",
+  "phone": "+250788111225",
+  "firstName": "Alice",
+  "lastName": "Uwimana",
+  "email": "alice.uwimana@example.com",
+  "role": "TENANT",
+  "status": "ACTIVE",
+  "cooperative": {
+    "id": "507f1f77bcf86cd799439012",
+    "name": "Kigali Unity Cooperative"
+  },
+  "createdAt": "2023-11-04T10:30:00Z",
+  "updatedAt": "2023-11-04T11:00:00Z"
+}
+```
+
+**Validation Rules:**
+- Only tenants with status `PENDING` can be approved or rejected
+- `rejectionReason` is optional for approval but recommended for rejections
+- `rejectionReason` cannot exceed 500 characters
+- Status must be a valid UserStatus enum value
+- SMS notifications are sent automatically (failure won't affect the approval/rejection process)
+
 ```json
 {
   "isActive": false
@@ -4697,9 +4760,17 @@ GET /rooms?cooperativeId=507f1f77bcf86cd799439012&roomType=2-BEDROOM&floor=2
 - **DELETE** `/api/v1/users/tenants/:id`
 - **Auth**: Required (SUPER_ADMIN role)
 - **Description**:
-  - Soft delete (set status to INACTIVE) if tenant has payment history
-  - Hard delete if tenant has no payments
+  - **Room Assignment Cleanup**: Automatically ends any active room assignments before deletion
+  - **Smart Deletion Logic**:
+    - Soft delete (set status to INACTIVE) if tenant has payment history
+    - Hard delete if tenant has no payments
+  - **Data Integrity**: Ensures room assignments are properly closed to prevent conflicts
 - **Response**: Confirmation message
+
+**Additional Room Assignment Cleanup:**
+- When a user status is changed to `INACTIVE` or `SUSPENDED`, all active room assignments are automatically ended
+- When a tenant application is rejected during approval process, any room assignments are terminated
+- Room assignment end date is set to current timestamp with appropriate notes
 
 ### Tenant Management Features
 
